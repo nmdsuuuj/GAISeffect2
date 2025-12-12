@@ -1,4 +1,3 @@
-
 # Project Roadmap
 
 This document outlines the future development plan for the Groove Sampler. While the current version focuses on a powerful sequencing and groove engine, the next phase aims to elevate it into a complete beat-making station by adding dedicated mixing, mastering, and final export capabilities.
@@ -83,19 +82,12 @@ A function to record the final, mixed-down audio output (all banks + master effe
 
 ## Phase 3: The Performance & Composition Update (今後の計画)
 
-### 1. 高度なシーケンサーモード
+### 1. Performance FX Automation System (Next Major Feature)
 
 #### **概要**
-従来のステップシーケンサーを超え、メロディやベースラインの作成、ステップごとの詳細なサウンドデザインを可能にするためのモードを導入します。**リアルタイムレコーディング機能**も統合し、演奏を直接シーケンスに記録できるようになります。
+ライブパフォーマンスに特化した、直感的で演奏可能なオートメーションシステムを構築します。これは、従来のシーケンサーモードとは独立して動作する、エフェクト専用の機能です。
 
-*   **Keyboard Mode:** リアルタイム演奏でノートピッチを入力できます。選択したスケールに自動でクオンタイズされるため、音楽理論の知識がなくてもハーモニーを外すことなく入力可能です。
-*   **Parameter Lock Mode:** ステップごとにサンプルの各種パラメータ（**ノートピッチ**、ボリューム、ディケイ、フィルター周波数など）を記録（ロック）できます。各ステップにロックされた値は、シーケンサーグリッド上で視覚的に表現され、直感的なエディットをサポートします。シーケンサーで設定されたノートピッチとは独立して、サンプル自体の基本ピッチも調整可能です。また、各トラックのノートシーケンスを一時的に無効にするミュートボタンも追加し、メロディとリズムの切り替えを容易にします。
-*   **Part Edit Mode:** 従来のA/Bパートの長さや再生レートを設定するモードです。
-*   **リアルタイムREC:** 再生中にパッドを叩いたタイミングや、ノブ/フェーダーを操作した動きをシーケンスデータとして直接記録します。記録されたノートはステップシーケンサーのグリッドに、パラメータの動きはParameter Lockデータに反映され、後から微調整が可能です。
-
-#### **UI/UX**
-*   **モード切替:** SEQビューに、3つの編集モード（Part Edit, Keyboard, Parameter Lock）を切り替えるためのスイッチを設置します。
-*   **RECボタン:** TransportエリアのRECボタン（またはSEQビュー内の専用ボタン）を押して再生すると、リアルタイムRECが有効になります。クオンタイズ設定（1/16, 1/8, OFFなど）も可能にします。
+**詳細な実装計画については、[`ROADMAP_AUTOMATION.md`](./ROADMAP_AUTOMATION.md) を参照してください。**
 
 ### 2. グローバル・スケールシステム
 

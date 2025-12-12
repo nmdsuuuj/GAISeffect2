@@ -1,4 +1,3 @@
-
 import { Groove, BiquadFilterType, PerformanceChain, FXAutomation, PerformanceEffect, FXType } from "./types";
 
 export const PAD_SIZE = 'w-8 h-8';
@@ -208,17 +207,14 @@ export const EXTENDED_DIVISIONS = [
     { label: '1/64', value: 0.0625 },
 ];
 
-export const FX_TYPES = ['stutter', 'glitch', 'filter', 'reverb'];
+export const FX_TYPES: FXType[] = ['stutter', 'glitch', 'filter', 'reverb', 'djLooper'];
 
 const createDefaultAutomation = (): FXAutomation => ({
     active: false,
     recording: false,
     data: [],
-    lengthSteps: 32,
-    speed: 1,
-    loopMode: 'loop', 
-    startPoint: 0,
-    endPoint: 1,
+    lengthSteps: 32, // 8 bars * 4 steps/bar
+    loopBar: null,
 });
 
 // Factory to create effect instances based on type
@@ -245,7 +241,8 @@ export const createDefaultEffect = (type: FXType): PerformanceEffect<any> => {
                 ...baseEffect,
                 params: { crush: 0, rate: 0, shuffle: 0, mix: 1 },
                 xyPads: [
-                    { id: 0, x: 0, y: 0, xParam: 'crush', yParam: 'rate', automation: createDefaultAutomation() }
+                    { id: 0, x: 0, y: 0, xParam: 'crush', yParam: 'rate', automation: createDefaultAutomation() },
+                    { id: 1, x: 0, y: 1, xParam: 'shuffle', yParam: 'mix', automation: createDefaultAutomation() }
                 ]
             };
         case 'filter':
@@ -253,7 +250,8 @@ export const createDefaultEffect = (type: FXType): PerformanceEffect<any> => {
                 ...baseEffect,
                 params: { type: 'lowpass', cutoff: 1, resonance: 0, lfoAmount: 0, lfoRate: 3, mix: 1 },
                 xyPads: [
-                    { id: 0, x: 1, y: 0, xParam: 'cutoff', yParam: 'resonance', automation: createDefaultAutomation() }
+                    { id: 0, x: 1, y: 0, xParam: 'cutoff', yParam: 'resonance', automation: createDefaultAutomation() },
+                    { id: 1, x: 0, y: 0.5, xParam: 'lfoAmount', yParam: 'lfoRate', automation: createDefaultAutomation() }
                 ]
             };
         case 'reverb':
@@ -261,7 +259,17 @@ export const createDefaultEffect = (type: FXType): PerformanceEffect<any> => {
                 ...baseEffect,
                 params: { size: 0.5, damping: 0.5, mod: 0.2, mix: 0.3 },
                 xyPads: [
-                    { id: 0, x: 0.5, y: 0.3, xParam: 'size', yParam: 'mix', automation: createDefaultAutomation() }
+                    { id: 0, x: 0.5, y: 0.3, xParam: 'size', yParam: 'mix', automation: createDefaultAutomation() },
+                    { id: 1, x: 0.5, y: 0.2, xParam: 'damping', yParam: 'mod', automation: createDefaultAutomation() }
+                ]
+            };
+        case 'djLooper':
+            return {
+                ...baseEffect,
+                params: { loopDivision: 12, lengthMultiplier: 1, fadeTime: 0.01, mix: 1 },
+                xyPads: [
+                    { id: 0, x: 0.5, y: 1, xParam: 'loopDivision', yParam: 'mix', automation: createDefaultAutomation() },
+                    { id: 1, x: 0, y: 0.01, xParam: 'lengthMultiplier', yParam: 'fadeTime', automation: createDefaultAutomation() }
                 ]
             };
         default:

@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useContext } from 'react';
 import { AppContext } from '../context/AppContext';
 import { FXType, FilterFXParams, GlitchParams, StutterParams, ReverbParams } from '../types';
@@ -139,7 +138,7 @@ export const useFxChain = () => {
             };
         } 
         else if (type === 'glitch') {
-            const bufferSize = 4096;
+            const bufferSize = 512; // FIX: Reduced buffer size for responsiveness
             const processor = ctx.createScriptProcessor(bufferSize, 2, 2);
             
             let currentParams: GlitchParams = { crush: 0, rate: 0, shuffle: 0, mix: 1 };
@@ -194,7 +193,7 @@ export const useFxChain = () => {
             };
         }
         else if (type === 'stutter') {
-            const bufferSize = 4096;
+            const bufferSize = 512; // FIX: Reduced buffer size for responsiveness
             const processor = ctx.createScriptProcessor(bufferSize, 2, 2);
             
             const maxDuration = 4; 
@@ -224,33 +223,41 @@ export const useFxChain = () => {
                 const safeBpm = currentBpm > 0 ? currentBpm : 120;
                 const samplesPerBeat = (sampleRate * 60) / safeBpm;
                 const divConfig = EXTENDED_DIVISIONS[Math.floor(safe(currentParams.division, 0))] || EXTENDED_DIVISIONS[0];
-                const targetLoopLength = Math.max(128, Math.floor(samplesPerBeat * divConfig.value));
+                const newFreezeLength = Math.max(128, Math.floor(samplesPerBeat * divConfig.value));
 
                 const shouldFreeze = safe(currentParams.feedback, 0) > 0.5;
 
-                if (shouldFreeze && !isFrozen) {
-                    isFrozen = true;
-                    freezeLength = targetLoopLength;
-                    if (freezeLength > freezeMaxSamples) freezeLength = freezeMaxSamples;
-                    
-                    let readPtr = writeHead - freezeLength;
-                    if (readPtr < 0) readPtr += totalSamples;
-                    
-                    for(let j=0; j<freezeLength; j++) {
-                        freezeLeft[j] = leftBuffer[readPtr];
-                        freezeRight[j] = rightBuffer[readPtr];
-                        readPtr++;
-                        if (readPtr >= totalSamples) readPtr = 0;
+                if (shouldFreeze) {
+                    // FIX: Re-capture audio if we just entered freeze OR if the loop length has changed
+                    if (!isFrozen || newFreezeLength !== freezeLength) {
+                        const justStartedFreezing = !isFrozen;
+                        isFrozen = true;
+                        freezeLength = newFreezeLength;
+                        if (freezeLength > freezeMaxSamples) freezeLength = freezeMaxSamples;
+                        
+                        let readPtr = writeHead - freezeLength;
+                        if (readPtr < 0) readPtr += totalSamples;
+                        
+                        for(let j=0; j<freezeLength; j++) {
+                            freezeLeft[j] = leftBuffer[readPtr];
+                            freezeRight[j] = rightBuffer[readPtr];
+                            readPtr++;
+                            if (readPtr >= totalSamples) readPtr = 0;
+                        }
+                        
+                        // Only reset playhead when starting a new freeze, not when just resizing
+                        if (justStartedFreezing) {
+                           freezePlayHead = 0;
+                        }
                     }
-                    freezePlayHead = 0;
-                } 
-                else if (!shouldFreeze) {
+                } else {
                     isFrozen = false;
                 }
 
                 const speed = safe(currentParams.speed, 1);
 
                 for (let i = 0; i < bufferSize; i++) {
+                    // Always record input to the ring buffer
                     leftBuffer[writeHead] = inputL[i];
                     rightBuffer[writeHead] = inputR[i];
                     writeHead++;

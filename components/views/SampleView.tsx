@@ -5,7 +5,7 @@ import Fader from '../Fader';
 import Pad from '../Pad';
 import { PADS_PER_BANK } from '../../constants';
 import { db, BankKit, StorableSample, audioBufferToStorable, storableToAudioBuffer } from '../../db';
-import { SubTab } from '../../App';
+import { SubTab } from '../../types';
 
 interface SampleViewProps {
     playSample: (id: number, time: number, params?: Partial<PlaybackParams>) => void;

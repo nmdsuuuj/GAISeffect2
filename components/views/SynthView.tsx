@@ -1,13 +1,12 @@
 
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { AppContext } from '../../context/AppContext';
-import { ActionType, SynthPreset } from '../../types';
+import { ActionType, SynthPreset, SubTab } from '../../types';
 import Fader from '../Fader';
 import Pad from '../Pad';
 import { OSC_WAVEFORMS, LFO_WAVEFORMS, FILTER_TYPES, WAVESHAPER_TYPES, MOD_SOURCES, MOD_DESTINATIONS, LFO_SYNC_RATES, LFO_SYNC_TRIGGERS } from '../../constants';
 import ModulationNode from '../ModulationNode';
 import LfoVisualizer from '../LfoVisualizer';
-import { SubTab } from '../../App';
 import { db } from '../../db';
 
 interface SynthViewProps {

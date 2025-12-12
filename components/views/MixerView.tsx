@@ -1,25 +1,21 @@
 
-
-
-
-
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../../context/AppContext';
-import { ActionType, MasterCompressorParams, FXType } from '../../types';
+import { ActionType, MasterCompressorParams, FXType, SubTab, AutomationClock } from '../../types';
 import Fader from '../Fader';
 import { TOTAL_BANKS, EXTENDED_DIVISIONS, FX_TYPES } from '../../constants';
 import CpuMeter from '../CpuMeter';
 import Pad from '../Pad';
 import XYPad from '../XYPad';
-import { SubTab } from '../../App';
 
 interface MixerViewProps {
     startMasterRecording: () => void;
     stopMasterRecording: () => void;
     setSubTabs: (tabs: SubTab[]) => void;
+    automationClock: AutomationClock;
 }
 
-const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterRecording, setSubTabs }) => {
+const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterRecording, setSubTabs, automationClock }) => {
     const { state, dispatch } = useContext(AppContext);
     const { 
         bankVolumes, bankPans, bankMutes, bankSolos, 
@@ -142,6 +138,13 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
 
     const handleFxBypassToggle = () => {
         dispatch({ type: ActionType.TOGGLE_FX_BYPASS, payload: activeSlotIndex });
+    };
+    
+    const engageFxSlot = () => {
+        const slot = performanceFx.slots[activeSlotIndex];
+        if (slot && !slot.isOn) {
+            handleFxBypassToggle();
+        }
     };
 
     const handleFxParamChange = (param: string, value: number) => {
@@ -362,46 +365,64 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
                 </div>
 
                 {/* XY Pads */}
-                {slot.xyPads.length > 0 && (
-                    <div className="grid grid-cols-2 gap-2 h-48 flex-shrink-0">
-                        {slot.xyPads.map((pad, idx) => (
-                            <XYPad
-                                key={idx}
-                                x={pad.x}
-                                y={pad.y}
-                                xLabel={pad.xParam}
-                                yLabel={pad.yParam}
-                                onChange={(x, y) => handleXYUpdate(idx, x, y)}
-                                color={activeSlotIndex % 2 === 0 ? 'bg-pink-400' : 'bg-sky-400'}
-                            />
+                <div className="grid grid-cols-2 gap-2 h-36 flex-shrink-0">
+                    {slot.xyPads.map((pad, idx) => (
+                        <XYPad
+                            key={idx}
+                            x={pad.x}
+                            y={pad.y}
+                            xLabel={pad.xParam}
+                            yLabel={pad.yParam}
+                            onChange={(x, y) => handleXYUpdate(idx, x, y)}
+                            onInteractionStart={engageFxSlot}
+                            color={idx % 2 === 0 ? 'bg-pink-400' : 'bg-sky-400'}
+                        />
+                    ))}
+                </div>
+                
+                {/* Bar Pads */}
+                <div className="bg-white p-2 rounded-lg shadow-sm">
+                    <div className="grid grid-cols-8 gap-1">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                            <button
+                                key={i}
+                                onMouseDown={() => {
+                                    engageFxSlot();
+                                    // TODO: Dispatch action to jump automation head to bar 'i'
+                                }}
+                                className="py-3 bg-slate-700 text-white font-bold rounded-md active:bg-pink-500 transition-colors text-sm"
+                            >
+                                {i + 1}
+                            </button>
                         ))}
                     </div>
-                )}
+                </div>
+
 
                 {/* Detailed Parameters (Faders) */}
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1 bg-white p-2 rounded-lg shadow-sm">
                     {Object.entries(params).map(([key, value]) => {
                         if (key === 'type') return null; // handled by dropdown
                         
-                        // Determine visual range for fader based on param name
                         let min = 0, max = 1, step = 0.01;
                         let displayValue = value as number;
                         let displayString: string | undefined = undefined;
 
-                        if (key === 'division' || key === 'lfoRate') {
+                        if (key === 'division' || key === 'lfoRate' || key === 'loopDivision') {
                             max = EXTENDED_DIVISIONS.length - 1;
                             step = 1;
                             displayString = EXTENDED_DIVISIONS[value as number]?.label;
                         } else if (key === 'speed') {
                             min = -1; max = 1;
                         } else if (key === 'cutoff') {
-                            // Log mapping for display
                             const minFreq = 20, maxFreq = 20000;
                             const hz = minFreq * Math.pow(maxFreq/minFreq, value as number);
                             displayValue = hz;
                             displayString = `${Math.round(hz)} Hz`;
                         } else if (key === 'resonance') {
-                            displayValue = (value as number) * 30; // approx scaling
+                            displayValue = (value as number) * 30;
+                        } else if (key === 'lengthMultiplier') {
+                            min = 1; max = 8; step = 1;
                         }
 
                         return (
@@ -473,8 +494,6 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
     const renderFxSnap = () => {
         const isSlotMode = fxSnapMode === 'SLOT';
         const isSaveMode = fxSnapAction === 'SAVE';
-        const activeColor = isSlotMode ? 'bg-sky-500' : 'bg-pink-500';
-        const activeText = isSlotMode ? 'text-sky-600' : 'text-pink-600';
 
         return (
             <div className="flex-grow bg-emerald-50/50 rounded-lg p-2 flex flex-col space-y-3">

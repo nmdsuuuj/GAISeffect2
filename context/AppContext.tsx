@@ -1,4 +1,3 @@
-
 import React, { createContext, useReducer, Dispatch, useEffect, useState, useCallback } from 'react';
 import { AppState, Action, ActionType, Sample, MasterCompressorParams, Step, LockableParam, Pattern, LaneClipboardData, BankClipboardData, BankPresetData, Synth, SynthPreset, ModMatrix, ModPatch, MasterCompressorSnapshot, FXType, PerformanceChain, GlobalFXSnapshot } from '../types';
 import { TOTAL_SAMPLES, TOTAL_PATTERNS, STEPS_PER_PATTERN, TOTAL_BANKS, GROOVE_PATTERNS, PADS_PER_BANK, OSC_WAVEFORMS, FILTER_TYPES, WAVESHAPER_TYPES, LFO_WAVEFORMS, MOD_SOURCES, MOD_DESTINATIONS, LFO_SYNC_RATES, LFO_SYNC_TRIGGERS, DEFAULT_PERFORMANCE_FX, createDefaultEffect, EXTENDED_DIVISIONS } from '../constants';
@@ -152,6 +151,7 @@ const initialState: AppState = {
     recordingThreshold: 0.02,
     bpm: 120,
     currentSteps: Array(TOTAL_BANKS).fill(-1),
+    activeSequencerStep: null, // NEW
     activeSampleId: 0,
     activeSampleBank: 0,
     activeGrooveIds: Array(TOTAL_BANKS).fill(0),
@@ -239,6 +239,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ...state, 
                 isPlaying: isNowPlaying,
                 currentSteps: isNowPlaying ? state.currentSteps : Array(TOTAL_BANKS).fill(-1),
+                activeSequencerStep: isNowPlaying ? state.activeSequencerStep : null, // NEW: Reset active step too
             };
         case ActionType.SET_BPM:
             return { ...state, bpm: action.payload };
@@ -246,7 +247,9 @@ const appReducer = (state: AppState, action: Action): AppState => {
             const { bankIndex, step } = action.payload;
             const newCurrentSteps = [...state.currentSteps];
             newCurrentSteps[bankIndex] = step;
-            return { ...state, currentSteps: newCurrentSteps };
+            // NEW: Only update activeSequencerStep if the bank matches the currently active sample bank
+            const newActiveSequencerStep = bankIndex === state.activeSampleBank ? step : state.activeSequencerStep;
+            return { ...state, currentSteps: newCurrentSteps, activeSequencerStep: newActiveSequencerStep };
         }
         case ActionType.SET_ACTIVE_SAMPLE: {
             const newSampleId = action.payload;
@@ -987,7 +990,9 @@ const appReducer = (state: AppState, action: Action): AppState => {
             const slot = newSlots[slotIndex];
             const pad = slot.xyPads[padIndex];
             const newPads = [...slot.xyPads];
-            newPads[padIndex] = { ...pad, x, y };
+            newPads[padIndex] = { ...pad, x, y }; // Update live X/Y value
+            
+            // Update mapped parameters
             const newParams = { ...slot.params };
             const mapValue = (paramName: string, normalizedValue: number): number => {
                 if (paramName === 'speed') return (normalizedValue * 2) - 1;
@@ -1154,7 +1159,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const propertiesToDelete: (keyof AppState)[] = [
                 'audioContext', 'isInitialized', 'isPlaying', 'isRecording', 
                 'isArmed', 'currentSteps', 'samples', 'grooves', 'isLoading',
-                'isMasterRecording', 'isMasterRecArmed', 'toastMessage'
+                'isMasterRecording', 'isMasterRecArmed', 'toastMessage',
+                'activeSequencerStep' // NEW: Do not save transient sequencer step
             ];
             propertiesToDelete.forEach(prop => delete (stateToSave as Partial<AppState>)[prop]);
 

@@ -6,10 +6,13 @@ interface XYPadProps {
     xLabel?: string;
     yLabel?: string;
     onChange: (x: number, y: number) => void;
+    onInteractionStart?: () => void;
+    onInteractionEnd?: () => void; // NEW: Callback for when interaction ends
     color?: string;
+    isRecording?: boolean; // NEW: For visual feedback
 }
 
-const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, color = 'bg-sky-400' }) => {
+const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, onInteractionStart, onInteractionEnd, color = 'bg-sky-400', isRecording = false }) => {
     const padRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
 
@@ -17,11 +20,9 @@ const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, color = '
         if (!padRef.current) return;
         const rect = padRef.current.getBoundingClientRect();
         
-        // Calculate raw position relative to element
         let newX = (clientX - rect.left) / rect.width;
-        let newY = 1 - ((clientY - rect.top) / rect.height); // Y is usually inverted in audio UIs (bottom=0)
+        let newY = 1 - ((clientY - rect.top) / rect.height);
 
-        // Clamp values
         newX = Math.max(0, Math.min(1, newX));
         newY = Math.max(0, Math.min(1, newY));
 
@@ -30,12 +31,14 @@ const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, color = '
 
     const handleMouseDown = (e: React.MouseEvent) => {
         e.preventDefault();
+        onInteractionStart?.();
         setIsDragging(true);
         handleInteraction(e.clientX, e.clientY);
     };
 
     const handleTouchStart = (e: React.TouchEvent) => {
-        e.preventDefault(); // Prevent scroll
+        e.preventDefault();
+        onInteractionStart?.();
         setIsDragging(true);
         handleInteraction(e.touches[0].clientX, e.touches[0].clientY);
     };
@@ -46,7 +49,7 @@ const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, color = '
             
             let clientX, clientY;
             if (window.TouchEvent && e instanceof TouchEvent) {
-                e.preventDefault(); // Prevent scrolling while dragging
+                e.preventDefault();
                 clientX = e.touches[0].clientX;
                 clientY = e.touches[0].clientY;
             } else {
@@ -56,7 +59,10 @@ const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, color = '
             handleInteraction(clientX, clientY);
         };
 
-        const handleUp = () => setIsDragging(false);
+        const handleUp = () => {
+            setIsDragging(false);
+            onInteractionEnd?.(); // NEW: Trigger callback
+        };
 
         if (isDragging) {
             window.addEventListener('mousemove', handleMove);
@@ -71,12 +77,15 @@ const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, color = '
             window.removeEventListener('mouseup', handleUp);
             window.removeEventListener('touchend', handleUp);
         };
-    }, [isDragging]);
+    }, [isDragging, handleInteraction, onInteractionEnd]);
 
     return (
-        <div className="relative w-full h-full min-h-[140px] bg-slate-800 rounded-lg overflow-hidden touch-none border border-slate-700 shadow-inner" ref={padRef}
-             onMouseDown={handleMouseDown}
-             onTouchStart={handleTouchStart}
+        <div 
+            className={`relative w-full h-full min-h-[140px] bg-slate-800 rounded-lg overflow-hidden touch-none border border-slate-700 shadow-inner
+                       ${isRecording ? 'ring-4 ring-rose-500/75 animate-pulse' : ''} transition-all`}
+            ref={padRef}
+            onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
         >
             {/* Grid lines */}
             <div className="absolute inset-0 grid grid-cols-4 grid-rows-4 pointer-events-none opacity-20">

@@ -94,6 +94,18 @@ export interface BankPresetData {
   grooveDepth: number;
 }
 
+export interface AutomationClock {
+    position: number;
+    bar: number;
+}
+
+export interface SubTab {
+  label: string;
+  onClick: () => void;
+  isActive: boolean;
+  isSpecial?: boolean; // For styling, e.g., REC button
+}
+
 // --- Synth ---
 export interface SynthOscillator {
     type: string;
@@ -180,17 +192,14 @@ export interface ModPatch {
 
 // --- Performance FX ---
 
-export type FXType = 'stutter' | 'glitch' | 'filter' | 'reverb';
+export type FXType = 'stutter' | 'glitch' | 'filter' | 'reverb' | 'djLooper'; // NEW: Add djLooper
 
 export interface FXAutomation {
-    active: boolean; // Is automation playback enabled?
-    recording: boolean; // Is currently recording?
-    data: { x: number; y: number }[]; // Time-series data points (0-1)
-    lengthSteps: number; // Length of loop in sequencer steps (e.g., 32, 64)
-    speed: number; // Playback speed multiplier (0.25, 0.5, 1, 2)
-    loopMode: 'loop' | 'oneShot';
-    startPoint: number; // 0-1, start position of the automation loop
-    endPoint: number; // 0-1, end position of the automation loop
+    active: boolean;
+    recording: boolean;
+    data: { position: number; x: number; y: number }[]; // position is 0-1
+    lengthSteps: number; // Total length in steps (e.g., 32 steps for 8 bars at 4 steps/bar)
+    loopBar: number | null; // NEW: The bar (0-7) to loop, or null for no loop.
 }
 
 export interface XYPad {
@@ -199,7 +208,7 @@ export interface XYPad {
     y: number; // Current Y value 0-1
     xParam: string; // Parameter name mapped to X
     yParam: string; // Parameter name mapped to Y
-    automation: FXAutomation;
+    automation: FXAutomation; // Automation data for this pad
 }
 
 export interface FXSnapshot {
@@ -249,6 +258,14 @@ export interface ReverbParams {
     mix: number; // 0-1
 }
 
+// NEW: DjLooperParams interface
+export interface DjLooperParams {
+    loopDivision: number;       // Index in EXTENDED_DIVISIONS
+    lengthMultiplier: number;   // e.g., 1, 2, 4 (multiplies effective loop length)
+    fadeTime: number;           // 0.001 to 0.1s
+    mix: number;                // 0-1
+}
+
 export interface PerformanceChain {
     slots: PerformanceEffect<any>[]; // Array of 4 independent slots
     routing: number[]; // Array of slot indices (e.g. [0, 1, 2, 3]) representing processing order
@@ -279,6 +296,7 @@ export interface AppState {
     recordingThreshold: number;
     bpm: number;
     currentSteps: number[];
+    activeSequencerStep: number | null; // NEW: The currently playing step for the active bank
     activeSampleId: number;
     activeSampleBank: number;
     // "Live" groove settings, loaded from the active pattern for the active bank.
@@ -401,13 +419,15 @@ export enum ActionType {
     // Performance FX Actions
     SET_FX_TYPE, 
     UPDATE_FX_PARAM,
-    UPDATE_FX_XY, // NEW
+    UPDATE_FX_XY,
     SET_FX_ROUTING,
     TOGGLE_FX_BYPASS,
     SAVE_FX_SNAPSHOT,
     LOAD_FX_SNAPSHOT,
     SAVE_GLOBAL_FX_SNAPSHOT,
     LOAD_GLOBAL_FX_SNAPSHOT,
+    SET_FX_AUTOMATION_RECORDING, // NEW
+    RECORD_FX_AUTOMATION_POINT, // NEW
     // System
     SET_IS_LOADING, 
     SHOW_TOAST,
@@ -489,13 +509,15 @@ export type Action =
     // Performance FX Actions
     | { type: ActionType.SET_FX_TYPE; payload: { slotIndex: number; type: FXType } } 
     | { type: ActionType.UPDATE_FX_PARAM; payload: { slotIndex: number; param: string; value: number | string } }
-    | { type: ActionType.UPDATE_FX_XY; payload: { slotIndex: number; padIndex: number; x: number; y: number } } // NEW
+    | { type: ActionType.UPDATE_FX_XY; payload: { slotIndex: number; padIndex: number; x: number; y: number } }
     | { type: ActionType.SET_FX_ROUTING; payload: number[] }
     | { type: ActionType.TOGGLE_FX_BYPASS; payload: number }
     | { type: ActionType.SAVE_FX_SNAPSHOT; payload: { slotIndex: number; index: number } }
     | { type: ActionType.LOAD_FX_SNAPSHOT; payload: { slotIndex: number; index: number } }
     | { type: ActionType.SAVE_GLOBAL_FX_SNAPSHOT; payload: { index: number } }
     | { type: ActionType.LOAD_GLOBAL_FX_SNAPSHOT; payload: { index: number } }
+    | { type: ActionType.SET_FX_AUTOMATION_RECORDING; payload: { slotIndex: number; padIndex: number; isRecording: boolean } } // NEW
+    | { type: ActionType.RECORD_FX_AUTOMATION_POINT; payload: { slotIndex: number; padIndex: number; point: { position: number; x: number; y: number } } } // NEW
     // System
     | { type: ActionType.SET_IS_LOADING; payload: boolean }
     | { type: ActionType.SHOW_TOAST; payload: string }

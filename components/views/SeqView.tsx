@@ -1,13 +1,12 @@
 
 import React, { useContext, useState, useMemo, useEffect, useRef } from 'react';
 import { AppContext } from '../../context/AppContext';
-import { ActionType, Pattern, LockableParam, Sample, PlaybackParams } from '../../types';
+import { ActionType, Pattern, LockableParam, Sample, PlaybackParams, SubTab } from '../../types';
 import Pad from '../Pad';
 import { PADS_PER_BANK, STEPS_PER_PART, LOOP_PRESETS, PATTERNS_PER_BANK, STEPS_PER_PATTERN } from '../../constants';
 import Fader from '../Fader';
 import SCALES from '../../scales';
 import TEMPLATES, { Template } from '../../templates';
-import { SubTab } from '../../App';
 
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -216,7 +215,7 @@ const SeqView: React.FC<SeqViewProps> = ({ playSample, playSynthNote, setSubTabs
         activePatternIds,
         activeSampleId,
         activeSampleBank,
-        currentSteps,
+        activeSequencerStep,
         samples,
         audioContext,
         playbackTrackStates,
@@ -271,7 +270,7 @@ const SeqView: React.FC<SeqViewProps> = ({ playSample, playSynthNote, setSubTabs
     const activePattern = patterns.find(p => p.id === activePatternId);
     const activeSample = samples[activeSampleId];
     const playbackState = playbackTrackStates[activeSampleBank];
-    const currentStep = currentSteps[activeSampleBank];
+    const currentStep = activeSequencerStep;
 
     const handleStepToggle = (sampleId: number, step: number) => {
         if (!activePattern) return;

@@ -1,4 +1,3 @@
-
 # Performance FX System - Requirements Definition
 
 ## Overview
@@ -9,72 +8,74 @@ A low-CPU, high-impact multi-effect system designed specifically for live perfor
 ### 1. Modular Slots & Modules
 *   **Structure:** The system is comprised of **4 Generic Slots** (Slot 1, Slot 2, Slot 3, Slot 4).
 *   **Modularity:** Any effect module can be loaded into any slot.
-    *   *Example:* You can load 4 "Stutter" modules in a row.
-    *   *Example:* You can have Filter -> Reverb -> Filter -> Reverb.
-*   **Swappable:** The effect algorithm within a slot can be swapped in real-time (e.g., changing Slot 1 from "Stutter" to "Glitch"). This resets the parameters for that slot but maintains the routing.
+*   **Swappable:** The effect algorithm within a slot can be swapped in real-time.
 *   **Available Modules:**
     1.  **Stutter / Loop:** Buffer manipulation for repeats and rhythmic freezes.
     2.  **Glitch:** Bitcrushing, sample rate reduction, and randomization.
     3.  **Filter:** Performance-oriented resonant filter (LP/HP/BP) with LFOs.
     4.  **Reverb:** A deep, atmospheric reverb (optimized for low CPU usage).
+    5.  **DJ Looper:** Rhythmic, DJ-style beat-repeater and looper.
 
 ### 2. Routing
 *   **Dynamic Order:** The processing order of the 4 slots is fully customizable.
-    *   *Default:* Slot 0 -> Slot 1 -> Slot 2 -> Slot 3
-    *   *Custom:* Slot 2 -> Slot 0 -> Slot 3 -> Slot 1
-*   **Bypass:** Each slot has a hard bypass switch to ensure 0% CPU usage when not in use.
+*   **Bypass:** Each slot has a hard bypass switch for CPU saving and a soft bypass for effect tails.
 
 ### 3. Parameter Control & Time Divisions
 *   **Focus:** Parameters should allow for drastic sonic changes ("maniac parameters").
-*   **Time Divisions:** Unlike standard sequencers (1/4, 1/8, 1/16), this system emphasizes **Odd & Tuplet Divisions** to create complex, shifting rhythms against the straight grid.
-    *   Standard: 1/4, 1/8, 1/16, 1/32
-    *   Odd/Tuplets: 1/3, 1/5, 1/6, 1/7, 1/9, 1/11, 1/13, 1/15... (Extended Set)
-    *   Dotted: 1/8D, 1/16D
+*   **Time Divisions:** Emphasizes **Odd & Tuplet Divisions** for complex rhythms.
+*   **Immediate Parameter Response:** All parameter changes from UI controls (XY Pads, faders) must affect the audio output **immediately** (i.e., on the next available audio processing block, with imperceptible latency). There shall be no musical quantization or delayed updates unless explicitly designed as a feature. This is critical for rhythmic effects like Stutter Division and LFO rates to feel "playable" and responsive.
 
-### 4. Performance Interface (XY Pads & Automation)
-*   **XY Pads:** Each effect slot features multiple XY Pads for intuitive multi-parameter control.
-*   **Touch Automation:**
-    *   **Recording:** Touching a pad records the movement. Releasing stops recording (or keeps the last value depending on latch mode).
-    *   **Duration:** Up to 8 bars of automation data per pad, independent of the main sequencer.
-    *   **Speed:** Playback speed of automation can be scaled (1/1, 1/2, 1/4, 1/8) for slowly evolving textures.
-    *   **Edit Points:** Users can easily adjust the **Start Point** and **End Point** of the recorded automation loop.
-    *   **Loop Mode:** Toggle between **Loop** (repeats the recorded gesture) and **One-Shot** (plays once and holds/resets).
+### 4. Performance Interface (XY Pads & Automation) - DETAILED
+*   **XY Pads:** Each effect module is equipped with **two XY Pads** for multi-parameter control.
+
+*   **Automation Core Logic:**
+    *   **Independent & Synced:** Each XY Pad's automation is independent but its timeline is synced to the main sequencer's BPM.
+    *   **Always-Running Timeline:** Automation for each pad runs on a continuous **8-bar loop**. The playback "head" is always moving along this timeline, even if no data is recorded.
+    *   **Touch-to-Record:** Touching an XY Pad **instantly activates recording** for that pad. The user's finger movements are recorded as automation data onto the timeline.
+    *   **Release-to-Hold (Latch):** When the finger is released, recording stops immediately. The last recorded parameter value is **held indefinitely** until the pad is touched again.
+    *   **Visual Feedback:** The path of recorded automation will be visualized on the timeline (e.g., as a colored line).
+
+*   **Automatic Engagement (FX Triggering):**
+    *   Touching an XY Pad or any of the 8 Bar Pads will automatically engage (turn ON) the corresponding effect slot if it is currently bypassed.
+    *   This allows the pads to function not only as controllers but also as performance triggers for bringing effects in and out of the mix instantaneously.
+
+*   **Bar Pad Control Interface:**
+    *   **Structure:** Below the XY Pads, a set of **8 "Bar Pads"** (labeled 1-8) will be displayed.
+    *   **Instant Cueing (Head Jump):** Tapping any Bar Pad instantly moves the automation playback head to the beginning of that corresponding bar. This allows for rhythmic "re-triggering" of automation phrases.
+    *   **Single-Bar Looping (Swipe Up):** Swiping **up** on a Bar Pad engages a loop for that specific bar. The automation will repeat that single bar indefinitely. The active loop bar will be visually highlighted.
+    *   **Loop Cancel (Swipe Down):** Swiping **down** on a looping Bar Pad (or any Bar Pad) cancels the loop, returning the playback head to its normal position within the global 8-bar loop.
 
 ### 5. Snapshot System (Instant Recall)
-*   **Concept:** "No Naming, Just Saving."
-*   **Per-Slot Snapshots:** Each of the 4 slots has **16 instant snapshot slots**.
-    *   Saves all parameters, XY Pad positions, and Automation data for that specific slot.
-*   **Global Snapshots:** A separate bank of **16 Global Snapshots**.
-    *   Saves the state of **all 4 slots** (including which Effect Module is loaded in each).
-    *   Saves the **routing order** of the chain.
-    *   Allows for complete, drastic transformation of the entire output processing with a single tap.
+*   **Per-Slot Snapshots:** Each slot has **16 instant snapshots** saving all parameters, XY Pad positions, and automation data.
+*   **Global Snapshots:** A separate bank of **16 Global Snapshots** saves the state of all 4 slots and the routing order.
 
 ### 6. Gapless Switching & Tails
-*   **Glitch-Free Switching:** Changing effect modules or snapshots should not cause audio clicks or dropouts. Use crossfading where necessary.
-*   **Effect Tails (Soft Bypass):** When bypassing effects like Reverb or Delay, the input should be muted while the output continues to ring out ("Tails"). Users can toggle between "Hard Bypass" (CPU save) and "Soft Bypass" (Musical).
+*   **Glitch-Free Switching:** Changing modules or snapshots is seamless.
+*   **Effect Tails (Soft Bypass):** When bypassing effects, tails ring out naturally.
 
 ## Detailed Module Specifications (Initial Set)
 
 ### Stutter / Loop
 *   **Role:** Catches audio into a buffer and re-triggers it.
-*   **Parameters:** `Division` (Odd/Weird), `Speed` (Fwd/Rev/Stop), `Feedback`, `Mix`.
 *   **XY Pad 1:** Division (X) / Feedback (Y)
+*   **XY Pad 2:** Speed (X) / Mix (Y)
 
 ### Glitch
 *   **Role:** Digital artifacts and degradation.
-*   **Parameters:** `Crush` (Bit Depth), `Rate` (Sample Rate), `Shuffle` (Jitter), `Mix`.
 *   **XY Pad 1:** Crush (X) / Rate (Y)
+*   **XY Pad 2:** Shuffle (X) / Mix (Y)
 
 ### Filter
 *   **Role:** DJ-style isolator and sweeping.
-*   **Parameters:** `Cutoff`, `Resonance`, `Type`, `LFO Amount`, `LFO Rate` (Odd).
 *   **XY Pad 1:** Cutoff (X) / Resonance (Y)
+*   **XY Pad 2:** LFO Amount (X) / LFO Rate (Y)
 
 ### Deep Reverb
 *   **Role:** Space and wash.
-*   **Requirements:** Must sound "expensive" but use minimal CPU.
-*   **Parameters:** `Size`, `Damping`, `Mod` (Chorus), `Mix`.
 *   **XY Pad 1:** Size (X) / Mix (Y)
+*   **XY Pad 2:** Damping (X) / Mod (Y)
 
-## Modularity & Extensibility
-*   The architecture is designed to allow new effect algorithms (e.g., "Delay", "Phaser", "Comb Filter") to be added in the future and loaded into any slot without breaking existing functionality.
+### DJ Looper
+*   **Role:** A musical, DJ-style beat repeater.
+*   **XY Pad 1:** Loop Division (X) / Mix (Y)
+*   **XY Pad 2:** Length Multiplier (X) / Fade Time (Y)

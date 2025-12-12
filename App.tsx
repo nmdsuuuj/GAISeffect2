@@ -1,7 +1,7 @@
 
 import React, { useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { AppContext } from './context/AppContext';
-import { Action, ActionType, PlaybackParams } from './types';
+import { Action, ActionType, PlaybackParams, SubTab } from './types';
 
 import Transport from './components/Transport';
 import TabButton from './components/TabButton';
@@ -15,18 +15,11 @@ import GlobalKeyboard from './components/GlobalKeyboard';
 
 import { useAudioEngine } from './hooks/useAudioEngine';
 import { useSequencer } from './hooks/useSequencer';
+import { useAutomationEngine } from './hooks/useAutomationEngine'; // NEW
 import { PADS_PER_BANK } from './constants';
 import SCALES from './scales';
 
 type View = 'OTO' | 'SEQ' | 'GROOVE' | 'MIXER' | 'PROJECT';
-
-export interface SubTab {
-  label: string;
-  onClick: () => void;
-  isActive: boolean;
-  isSpecial?: boolean; // For styling, e.g., REC button
-}
-
 
 const App: React.FC = () => {
   const { state, dispatch } = useContext(AppContext);
@@ -94,6 +87,7 @@ const App: React.FC = () => {
     lfoAnalysers // Get analysers
   } = useAudioEngine();
   useSequencer(playSample, playSynthNote, scheduleLfoRetrigger);
+  const automationClock = useAutomationEngine(state, dispatch); // NEW: Automation Engine
 
   const handleNotePlay = useCallback((detune: number) => {
     const { 
@@ -367,7 +361,7 @@ const App: React.FC = () => {
       case 'GROOVE':
         return <GrooveView />;
       case 'MIXER':
-          return <MixerView setSubTabs={setSubTabs} startMasterRecording={startMasterRecording} stopMasterRecording={stopMasterRecording} />;
+          return <MixerView setSubTabs={setSubTabs} startMasterRecording={startMasterRecording} stopMasterRecording={stopMasterRecording} automationClock={automationClock} />;
       case 'PROJECT':
         return <ProjectView flushAllSources={flushAllSources} />;
       default:
