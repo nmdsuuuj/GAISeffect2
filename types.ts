@@ -1,4 +1,3 @@
-
 export interface Groove {
     id: number;
     name: string;
@@ -197,6 +196,7 @@ export type FXType = 'stutter' | 'glitch' | 'filter' | 'reverb' | 'djLooper'; //
 export interface FXAutomation {
     active: boolean;
     recording: boolean;
+    recordMode: 'from-bar-start' | 'punch-in'; // NEW
     data: { position: number; x: number; y: number }[]; // position is 0-1
     lengthSteps: number; // Total length in steps (e.g., 32 steps for 8 bars at 4 steps/bar)
     loopBar: number | null; // NEW: The bar (0-7) to loop, or null for no loop.
@@ -270,6 +270,7 @@ export interface PerformanceChain {
     slots: PerformanceEffect<any>[]; // Array of 4 independent slots
     routing: number[]; // Array of slot indices (e.g. [0, 1, 2, 3]) representing processing order
     globalSnapshots: GlobalFXSnapshot[]; // 16 Global Snapshots
+    jumpToBar: number | null; // NEW: For instant cueing of automation
 }
 
 export interface GlobalFXSnapshot {
@@ -281,6 +282,7 @@ export interface GlobalFXSnapshot {
             params: any;
             isOn: boolean;
             bypassMode?: 'hard' | 'soft';
+            xyPads: XYPad[]; // NEW: Added xyPads for automation data
         }[];
         routing: number[];
     };
@@ -426,8 +428,12 @@ export enum ActionType {
     LOAD_FX_SNAPSHOT,
     SAVE_GLOBAL_FX_SNAPSHOT,
     LOAD_GLOBAL_FX_SNAPSHOT,
-    SET_FX_AUTOMATION_RECORDING, // NEW
-    RECORD_FX_AUTOMATION_POINT, // NEW
+    SET_FX_AUTOMATION_RECORDING, 
+    RECORD_FX_AUTOMATION_POINT, 
+    SET_FX_AUTOMATION_LOOP, // NEW
+    SET_FX_AUTOMATION_RECORD_MODE, // NEW
+    JUMP_FX_AUTOMATION, // NEW
+    CLEAR_FX_AUTOMATION_JUMP, // NEW
     // System
     SET_IS_LOADING, 
     SHOW_TOAST,
@@ -516,8 +522,12 @@ export type Action =
     | { type: ActionType.LOAD_FX_SNAPSHOT; payload: { slotIndex: number; index: number } }
     | { type: ActionType.SAVE_GLOBAL_FX_SNAPSHOT; payload: { index: number } }
     | { type: ActionType.LOAD_GLOBAL_FX_SNAPSHOT; payload: { index: number } }
-    | { type: ActionType.SET_FX_AUTOMATION_RECORDING; payload: { slotIndex: number; padIndex: number; isRecording: boolean } } // NEW
-    | { type: ActionType.RECORD_FX_AUTOMATION_POINT; payload: { slotIndex: number; padIndex: number; point: { position: number; x: number; y: number } } } // NEW
+    | { type: ActionType.SET_FX_AUTOMATION_RECORDING; payload: { slotIndex: number; padIndex: number; isRecording: boolean } }
+    | { type: ActionType.RECORD_FX_AUTOMATION_POINT; payload: { slotIndex: number; padIndex: number; point: { position: number; x: number; y: number } } }
+    | { type: ActionType.SET_FX_AUTOMATION_LOOP; payload: { slotIndex: number; bar: number | null } }
+    | { type: ActionType.SET_FX_AUTOMATION_RECORD_MODE; payload: { slotIndex: number; padIndex: number; mode: 'from-bar-start' | 'punch-in' } } // NEW
+    | { type: ActionType.JUMP_FX_AUTOMATION; payload: { bar: number } }
+    | { type: ActionType.CLEAR_FX_AUTOMATION_JUMP }
     // System
     | { type: ActionType.SET_IS_LOADING; payload: boolean }
     | { type: ActionType.SHOW_TOAST; payload: string }

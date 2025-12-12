@@ -212,6 +212,7 @@ export const FX_TYPES: FXType[] = ['stutter', 'glitch', 'filter', 'reverb', 'djL
 const createDefaultAutomation = (): FXAutomation => ({
     active: false,
     recording: false,
+    recordMode: 'from-bar-start', // Default record mode
     data: [],
     lengthSteps: 32, // 8 bars * 4 steps/bar
     loopBar: null,
@@ -288,4 +289,5 @@ export const DEFAULT_PERFORMANCE_FX: PerformanceChain = {
     // Default routing: Slot 0 -> Slot 1 -> Slot 2 -> Slot 3
     routing: [0, 1, 2, 3], 
     globalSnapshots: Array(16).fill({ active: false, chainState: {} }),
+    jumpToBar: null,
 };

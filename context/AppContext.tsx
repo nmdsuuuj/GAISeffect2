@@ -1,5 +1,5 @@
 import React, { createContext, useReducer, Dispatch, useEffect, useState, useCallback } from 'react';
-import { AppState, Action, ActionType, Sample, MasterCompressorParams, Step, LockableParam, Pattern, LaneClipboardData, BankClipboardData, BankPresetData, Synth, SynthPreset, ModMatrix, ModPatch, MasterCompressorSnapshot, FXType, PerformanceChain, GlobalFXSnapshot } from '../types';
+import { AppState, Action, ActionType, Sample, MasterCompressorParams, Step, LockableParam, Pattern, LaneClipboardData, BankClipboardData, BankPresetData, Synth, SynthPreset, ModMatrix, ModPatch, MasterCompressorSnapshot, FXType, PerformanceChain, GlobalFXSnapshot, XYPad } from '../types';
 import { TOTAL_SAMPLES, TOTAL_PATTERNS, STEPS_PER_PATTERN, TOTAL_BANKS, GROOVE_PATTERNS, PADS_PER_BANK, OSC_WAVEFORMS, FILTER_TYPES, WAVESHAPER_TYPES, LFO_WAVEFORMS, MOD_SOURCES, MOD_DESTINATIONS, LFO_SYNC_RATES, LFO_SYNC_TRIGGERS, DEFAULT_PERFORMANCE_FX, createDefaultEffect, EXTENDED_DIVISIONS } from '../constants';
 import SCALES from '../scales';
 import { db, Session, StorableSample, audioBufferToStorable, storableToAudioBuffer } from '../db';
@@ -996,9 +996,12 @@ const appReducer = (state: AppState, action: Action): AppState => {
             const newParams = { ...slot.params };
             const mapValue = (paramName: string, normalizedValue: number): number => {
                 if (paramName === 'speed') return (normalizedValue * 2) - 1;
-                if (paramName === 'division' || paramName === 'lfoRate') {
+                if (paramName === 'division' || paramName === 'lfoRate' || paramName === 'loopDivision') {
                     const maxIndex = EXTENDED_DIVISIONS.length - 1;
                     return Math.floor(normalizedValue * maxIndex);
+                }
+                 if (paramName === 'lengthMultiplier') {
+                    return Math.floor(1 + (normalizedValue * 7));
                 }
                 return normalizedValue;
             };
@@ -1036,8 +1039,8 @@ const appReducer = (state: AppState, action: Action): AppState => {
         case ActionType.SAVE_GLOBAL_FX_SNAPSHOT: {
             const { index } = action.payload;
             const newGlobalSnapshots = [...state.performanceFx.globalSnapshots];
-            const slotsState = state.performanceFx.slots.map(slot => ({ type: slot.type, params: JSON.parse(JSON.stringify(slot.params)), isOn: slot.isOn, bypassMode: slot.bypassMode }));
-            const chainState = { slots: slotsState, routing: [...state.performanceFx.routing] };
+            const slotsState = state.performanceFx.slots.map(slot => ({ type: slot.type, params: JSON.parse(JSON.stringify(slot.params)), isOn: slot.isOn, bypassMode: slot.bypassMode, xyPads: JSON.parse(JSON.stringify(slot.xyPads)) }));
+            const chainState: GlobalFXSnapshot['chainState'] = { slots: slotsState, routing: [...state.performanceFx.routing] };
             newGlobalSnapshots[index] = { id: index, active: true, chainState };
             return { ...state, performanceFx: { ...state.performanceFx, globalSnapshots: newGlobalSnapshots } };
         }
@@ -1047,9 +1050,79 @@ const appReducer = (state: AppState, action: Action): AppState => {
             if (!snapshot.active) return state;
             const restoredSlots = snapshot.chainState.slots.map(savedSlot => {
                 const base = createDefaultEffect(savedSlot.type);
-                return { ...base, isOn: savedSlot.isOn, bypassMode: savedSlot.bypassMode || 'soft', params: savedSlot.params };
+                return { 
+                    ...base, 
+                    isOn: savedSlot.isOn, 
+                    bypassMode: savedSlot.bypassMode || 'soft', 
+                    params: savedSlot.params,
+                    xyPads: savedSlot.xyPads ? JSON.parse(JSON.stringify(savedSlot.xyPads)) : base.xyPads,
+                };
             });
             return { ...state, performanceFx: { ...state.performanceFx, routing: snapshot.chainState.routing, slots: restoredSlots } };
+        }
+        case ActionType.SET_FX_AUTOMATION_RECORDING: {
+            const { slotIndex, padIndex, isRecording } = action.payload;
+            const newSlots = state.performanceFx.slots.map((slot, sIdx) => {
+                if (sIdx !== slotIndex) return slot;
+                const newPads = slot.xyPads.map((pad, pIdx) => {
+                    if (pIdx !== padIndex) return pad;
+                    // FIX: Clear automation data when recording starts
+                    const newData = isRecording ? [] : pad.automation.data;
+                    return {
+                        ...pad,
+                        automation: {
+                            ...pad.automation,
+                            recording: isRecording,
+                            data: newData,
+                        }
+                    };
+                });
+                return { ...slot, xyPads: newPads };
+            });
+            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+        }
+        case ActionType.RECORD_FX_AUTOMATION_POINT: {
+            const { slotIndex, padIndex, point } = action.payload;
+            const newSlots = [...state.performanceFx.slots];
+            const slot = { ...newSlots[slotIndex] };
+            const newPads = [...slot.xyPads];
+            const pad = { ...newPads[padIndex] };
+            const automation = { ...pad.automation };
+            const newData = [...automation.data, point];
+            // No need to sort on every point, but can be added if needed for specific cases.
+            // Sorting on playback lookup is generally sufficient.
+            automation.data = newData;
+            pad.automation = automation;
+            newPads[padIndex] = pad;
+            slot.xyPads = newPads;
+            newSlots[slotIndex] = slot;
+            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+        }
+        case ActionType.SET_FX_AUTOMATION_RECORD_MODE: {
+            const { slotIndex, padIndex, mode } = action.payload;
+            const newSlots = JSON.parse(JSON.stringify(state.performanceFx.slots));
+            const slot = newSlots[slotIndex];
+            if (slot && slot.xyPads[padIndex]) {
+                slot.xyPads[padIndex].automation.recordMode = mode;
+            }
+            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+        }
+        case ActionType.SET_FX_AUTOMATION_LOOP: {
+            const { slotIndex, bar } = action.payload;
+            const newSlots = JSON.parse(JSON.stringify(state.performanceFx.slots));
+            const slot = newSlots[slotIndex];
+            if (slot) {
+                slot.xyPads.forEach((pad: XYPad) => {
+                    pad.automation.loopBar = bar;
+                });
+            }
+            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+        }
+        case ActionType.JUMP_FX_AUTOMATION: {
+            return { ...state, performanceFx: { ...state.performanceFx, jumpToBar: action.payload.bar } };
+        }
+        case ActionType.CLEAR_FX_AUTOMATION_JUMP: {
+            return { ...state, performanceFx: { ...state.performanceFx, jumpToBar: null } };
         }
 
         default:

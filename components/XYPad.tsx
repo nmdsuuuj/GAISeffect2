@@ -7,9 +7,9 @@ interface XYPadProps {
     yLabel?: string;
     onChange: (x: number, y: number) => void;
     onInteractionStart?: () => void;
-    onInteractionEnd?: () => void; // NEW: Callback for when interaction ends
+    onInteractionEnd?: () => void;
     color?: string;
-    isRecording?: boolean; // NEW: For visual feedback
+    isRecording?: boolean;
 }
 
 const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, onInteractionStart, onInteractionEnd, color = 'bg-sky-400', isRecording = false }) => {
@@ -61,7 +61,7 @@ const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, onInterac
 
         const handleUp = () => {
             setIsDragging(false);
-            onInteractionEnd?.(); // NEW: Trigger callback
+            onInteractionEnd?.();
         };
 
         if (isDragging) {

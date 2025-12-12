@@ -33,6 +33,9 @@ A low-CPU, high-impact multi-effect system designed specifically for live perfor
     *   **Always-Running Timeline:** Automation for each pad runs on a continuous **8-bar loop**. The playback "head" is always moving along this timeline, even if no data is recorded.
     *   **Touch-to-Record:** Touching an XY Pad **instantly activates recording** for that pad. The user's finger movements are recorded as automation data onto the timeline.
     *   **Release-to-Hold (Latch):** When the finger is released, recording stops immediately. The last recorded parameter value is **held indefinitely** until the pad is touched again.
+    *   **Record Mode:** A switch will allow the user to select the recording behavior:
+        *   **`FROM START`:** When the XY pad is touched, recording begins from the start of the current bar (quantized).
+        *   **`PUNCH IN`:** Recording begins immediately at the current playback position.
     *   **Visual Feedback:** The path of recorded automation will be visualized on the timeline (e.g., as a colored line).
 
 *   **Automatic Engagement (FX Triggering):**
@@ -44,6 +47,11 @@ A low-CPU, high-impact multi-effect system designed specifically for live perfor
     *   **Instant Cueing (Head Jump):** Tapping any Bar Pad instantly moves the automation playback head to the beginning of that corresponding bar. This allows for rhythmic "re-triggering" of automation phrases.
     *   **Single-Bar Looping (Swipe Up):** Swiping **up** on a Bar Pad engages a loop for that specific bar. The automation will repeat that single bar indefinitely. The active loop bar will be visually highlighted.
     *   **Loop Cancel (Swipe Down):** Swiping **down** on a looping Bar Pad (or any Bar Pad) cancels the loop, returning the playback head to its normal position within the global 8-bar loop.
+    *   **Visual Feedback:** Bar Pads will be visually distinct to indicate their state:
+        *   **Current Bar:** Brightly lit to show the current playback head position.
+        *   **Looping Bar:** Pulsing color to indicate an active loop.
+        *   **Contains Automation:** A subtle background color change to show that automation data exists within that bar.
+
 
 ### 5. Snapshot System (Instant Recall)
 *   **Per-Slot Snapshots:** Each slot has **16 instant snapshots** saving all parameters, XY Pad positions, and automation data.

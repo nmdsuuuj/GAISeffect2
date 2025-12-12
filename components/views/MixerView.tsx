@@ -1,4 +1,3 @@
-
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../../context/AppContext';
 import { ActionType, MasterCompressorParams, FXType, SubTab, AutomationClock } from '../../types';
@@ -7,6 +6,7 @@ import { TOTAL_BANKS, EXTENDED_DIVISIONS, FX_TYPES } from '../../constants';
 import CpuMeter from '../CpuMeter';
 import Pad from '../Pad';
 import XYPad from '../XYPad';
+import BarPad from '../BarPad';
 
 interface MixerViewProps {
     startMasterRecording: () => void;
@@ -152,7 +152,21 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
     };
 
     const handleXYUpdate = (padIndex: number, x: number, y: number) => {
+        // Live parameter update
         dispatch({ type: ActionType.UPDATE_FX_XY, payload: { slotIndex: activeSlotIndex, padIndex, x, y } });
+
+        // Check if this pad is recording and if so, record the automation point
+        const pad = performanceFx.slots[activeSlotIndex].xyPads[padIndex];
+        if (pad.automation.recording) {
+            dispatch({
+                type: ActionType.RECORD_FX_AUTOMATION_POINT,
+                payload: {
+                    slotIndex: activeSlotIndex,
+                    padIndex,
+                    point: { position: automationClock.position, x, y }
+                }
+            });
+        }
     };
 
     const handleFxRoutingChange = (currentIndex: number, direction: -1 | 1) => {
@@ -184,6 +198,28 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
                 dispatch({ type: ActionType.SHOW_TOAST, payload: `Loaded Global Snapshot ${index + 1}` });
             }
         }
+    };
+
+    const handleBarTap = (barIndex: number) => {
+        engageFxSlot();
+        dispatch({ type: ActionType.JUMP_FX_AUTOMATION, payload: { bar: barIndex } });
+    };
+
+    const handleBarSwipeUp = (barIndex: number) => {
+        engageFxSlot();
+        const isCurrentlyLoopingThisBar = performanceFx.slots[activeSlotIndex].xyPads.some(p => p.automation.loopBar === barIndex);
+        dispatch({ 
+            type: ActionType.SET_FX_AUTOMATION_LOOP, 
+            payload: { slotIndex: activeSlotIndex, bar: isCurrentlyLoopingThisBar ? null : barIndex } 
+        });
+    };
+    
+    const handleBarSwipeDown = (barIndex: number) => {
+        engageFxSlot();
+        dispatch({ 
+            type: ActionType.SET_FX_AUTOMATION_LOOP, 
+            payload: { slotIndex: activeSlotIndex, bar: null } 
+        });
     };
 
 
@@ -341,15 +377,23 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
     );
 
     const renderFxMain = () => {
-        const slot = performanceFx.slots[activeSlotIndex];
-        const params = slot.params;
+        const activeSlot = performanceFx.slots[activeSlotIndex];
+        if (!activeSlot) return null;
+        const params = activeSlot.params;
+        const recordMode = activeSlot.xyPads[0]?.automation.recordMode || 'from-bar-start';
+
+        const handleRecModeToggle = () => {
+            const newMode = recordMode === 'from-bar-start' ? 'punch-in' : 'from-bar-start';
+            dispatch({ type: ActionType.SET_FX_AUTOMATION_RECORD_MODE, payload: { slotIndex: activeSlotIndex, padIndex: 0, mode: newMode } });
+            dispatch({ type: ActionType.SET_FX_AUTOMATION_RECORD_MODE, payload: { slotIndex: activeSlotIndex, padIndex: 1, mode: newMode } });
+        };
 
         return (
             <div className="flex-grow bg-emerald-50/50 rounded-lg p-2 flex flex-col space-y-2 overflow-y-auto">
                 {/* Header: Type & Bypass */}
                 <div className="flex items-center justify-between bg-white p-2 rounded-lg shadow-sm">
                     <select 
-                        value={slot.type}
+                        value={activeSlot.type}
                         onChange={(e) => handleFxTypeChange(e.target.value)}
                         className="bg-emerald-100 text-slate-800 font-bold text-lg rounded px-2 py-1 focus:outline-none uppercase"
                     >
@@ -358,15 +402,15 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
                     <button
                         onClick={handleFxBypassToggle}
                         className={`px-6 py-2 rounded font-bold text-white transition-colors uppercase tracking-wider
-                            ${slot.isOn ? 'bg-rose-500 shadow-md transform scale-105' : 'bg-slate-400'}`}
+                            ${activeSlot.isOn ? 'bg-rose-500 shadow-md transform scale-105' : 'bg-slate-400'}`}
                     >
-                        {slot.isOn ? 'ACTIVE' : 'BYPASS'}
+                        {activeSlot.isOn ? 'ACTIVE' : 'BYPASS'}
                     </button>
                 </div>
 
                 {/* XY Pads */}
                 <div className="grid grid-cols-2 gap-2 h-36 flex-shrink-0">
-                    {slot.xyPads.map((pad, idx) => (
+                    {activeSlot.xyPads.map((pad, idx) => (
                         <XYPad
                             key={idx}
                             x={pad.x}
@@ -374,30 +418,62 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
                             xLabel={pad.xParam}
                             yLabel={pad.yParam}
                             onChange={(x, y) => handleXYUpdate(idx, x, y)}
-                            onInteractionStart={engageFxSlot}
+                            onInteractionStart={() => {
+                                engageFxSlot();
+                                const currentMode = performanceFx.slots[activeSlotIndex].xyPads[idx].automation.recordMode;
+                                if (currentMode === 'from-bar-start') {
+                                    dispatch({ type: ActionType.JUMP_FX_AUTOMATION, payload: { bar: automationClock.bar } });
+                                }
+                                dispatch({ type: ActionType.SET_FX_AUTOMATION_RECORDING, payload: { slotIndex: activeSlotIndex, padIndex: idx, isRecording: true } });
+                            }}
+                            onInteractionEnd={() => {
+                                dispatch({ type: ActionType.SET_FX_AUTOMATION_RECORDING, payload: { slotIndex: activeSlotIndex, padIndex: idx, isRecording: false } });
+                            }}
                             color={idx % 2 === 0 ? 'bg-pink-400' : 'bg-sky-400'}
+                            isRecording={pad.automation.recording}
                         />
                     ))}
+                </div>
+
+                {/* Automation Controls: REC MODE */}
+                <div className="bg-white p-2 rounded-lg shadow-sm flex items-center justify-center space-x-4">
+                    <span className="text-xs font-bold text-slate-500">REC MODE</span>
+                    <button
+                        onClick={handleRecModeToggle}
+                        className="bg-emerald-200 text-emerald-800 font-bold text-xs px-4 py-2 rounded-md hover:bg-emerald-300 transition-colors"
+                    >
+                        {recordMode === 'from-bar-start' ? 'FROM START' : 'PUNCH IN'}
+                    </button>
                 </div>
                 
                 {/* Bar Pads */}
                 <div className="bg-white p-2 rounded-lg shadow-sm">
                     <div className="grid grid-cols-8 gap-1">
-                        {Array.from({ length: 8 }).map((_, i) => (
-                            <button
-                                key={i}
-                                onMouseDown={() => {
-                                    engageFxSlot();
-                                    // TODO: Dispatch action to jump automation head to bar 'i'
-                                }}
-                                className="py-3 bg-slate-700 text-white font-bold rounded-md active:bg-pink-500 transition-colors text-sm"
-                            >
-                                {i + 1}
-                            </button>
-                        ))}
+                        {Array.from({ length: 8 }).map((_, i) => {
+                            const barStartPos = i / 8.0;
+                            const barEndPos = (i + 1) / 8.0;
+
+                            const hasAutomation = activeSlot.xyPads.some(pad => 
+                                pad.automation.data.some(point => point.position >= barStartPos && point.position < barEndPos)
+                            );
+                            
+                            const isLooping = activeSlot.xyPads.some(pad => pad.automation.loopBar === i);
+
+                            return (
+                                <BarPad
+                                    key={i}
+                                    barIndex={i}
+                                    isActive={automationClock.bar === i}
+                                    isLooping={isLooping}
+                                    hasAutomation={hasAutomation}
+                                    onTap={handleBarTap}
+                                    onSwipeUp={handleBarSwipeUp}
+                                    onSwipeDown={handleBarSwipeDown}
+                                />
+                            );
+                        })}
                     </div>
                 </div>
-
 
                 {/* Detailed Parameters (Faders) */}
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1 bg-white p-2 rounded-lg shadow-sm">
