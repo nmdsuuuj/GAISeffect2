@@ -10,9 +10,10 @@ interface XYPadProps {
     onInteractionEnd?: () => void;
     color?: string;
     isRecording?: boolean;
+    isFlashing?: boolean; // NEW
 }
 
-const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, onInteractionStart, onInteractionEnd, color = 'bg-sky-400', isRecording = false }) => {
+const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, onInteractionStart, onInteractionEnd, color = 'bg-sky-400', isRecording = false, isFlashing = false }) => {
     const padRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
 
@@ -79,10 +80,13 @@ const XYPad: React.FC<XYPadProps> = ({ x, y, xLabel, yLabel, onChange, onInterac
         };
     }, [isDragging, handleInteraction, onInteractionEnd]);
 
+    const ringClass = isRecording ? 'ring-4 ring-rose-500/75 animate-pulse' : '';
+    const bgClass = isFlashing ? 'bg-red-500' : 'bg-slate-800';
+
     return (
         <div 
-            className={`relative w-full h-full min-h-[140px] bg-slate-800 rounded-lg overflow-hidden touch-none border border-slate-700 shadow-inner
-                       ${isRecording ? 'ring-4 ring-rose-500/75 animate-pulse' : ''} transition-all`}
+            className={`relative w-full h-full min-h-[140px] rounded-lg overflow-hidden touch-none border border-slate-700 shadow-inner
+                       ${bgClass} ${ringClass} transition-all`}
             ref={padRef}
             onMouseDown={handleMouseDown}
             onTouchStart={handleTouchStart}

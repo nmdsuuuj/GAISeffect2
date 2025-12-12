@@ -434,6 +434,7 @@ export enum ActionType {
     SET_FX_AUTOMATION_RECORD_MODE, // NEW
     JUMP_FX_AUTOMATION, // NEW
     CLEAR_FX_AUTOMATION_JUMP, // NEW
+    CLEAR_FX_AUTOMATION, // NEW
     // System
     SET_IS_LOADING, 
     SHOW_TOAST,
@@ -528,6 +529,7 @@ export type Action =
     | { type: ActionType.SET_FX_AUTOMATION_RECORD_MODE; payload: { slotIndex: number; padIndex: number; mode: 'from-bar-start' | 'punch-in' } } // NEW
     | { type: ActionType.JUMP_FX_AUTOMATION; payload: { bar: number } }
     | { type: ActionType.CLEAR_FX_AUTOMATION_JUMP }
+    | { type: ActionType.CLEAR_FX_AUTOMATION; payload: { slotIndex: number } }
     // System
     | { type: ActionType.SET_IS_LOADING; payload: boolean }
     | { type: ActionType.SHOW_TOAST; payload: string }

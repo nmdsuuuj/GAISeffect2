@@ -1124,6 +1124,21 @@ const appReducer = (state: AppState, action: Action): AppState => {
         case ActionType.CLEAR_FX_AUTOMATION_JUMP: {
             return { ...state, performanceFx: { ...state.performanceFx, jumpToBar: null } };
         }
+        case ActionType.CLEAR_FX_AUTOMATION: {
+            const { slotIndex } = action.payload;
+            const newSlots = state.performanceFx.slots.map((slot, sIdx) => {
+                if (sIdx !== slotIndex) return slot;
+                const newPads = slot.xyPads.map(pad => ({
+                    ...pad,
+                    automation: {
+                        ...pad.automation,
+                        data: [], // Clear the data
+                    }
+                }));
+                return { ...slot, xyPads: newPads };
+            });
+            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+        }
 
         default:
             return state;

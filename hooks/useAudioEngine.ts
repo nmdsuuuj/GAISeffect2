@@ -1,4 +1,3 @@
-
 import { useContext, useRef, useCallback, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { ActionType, Sample, PlaybackParams, BiquadFilterType, Synth } from '../types';
@@ -298,6 +297,31 @@ export const useAudioEngine = () => {
             }
         }
     }, [audioContext, bankVolumes, bankPans, bankMutes, bankSolos, masterVolume]);
+
+    // --- EFFECT: Handle Master Compressor ---
+    useEffect(() => {
+        if (!audioContext || !masterCompressorRef.current) return;
+
+        const compressor = masterCompressorRef.current;
+        const now = audioContext.currentTime;
+        const RAMP = 0.02; // Short ramp time for smooth changes
+
+        if (masterCompressorOn) {
+            setTarget(compressor.threshold, safe(masterCompressorParams.threshold, -24), now, RAMP);
+            setTarget(compressor.knee, safe(masterCompressorParams.knee, 30), now, RAMP);
+            setTarget(compressor.ratio, safe(masterCompressorParams.ratio, 12), now, RAMP);
+            setTarget(compressor.attack, safe(masterCompressorParams.attack, 0.003), now, 0.01);
+            setTarget(compressor.release, safe(masterCompressorParams.release, 0.25), now, 0.01);
+        } else {
+            // Bypass by setting to neutral values
+            setTarget(compressor.threshold, 0, now, RAMP);
+            setTarget(compressor.knee, 0, now, RAMP);
+            setTarget(compressor.ratio, 1, now, RAMP);
+            setTarget(compressor.attack, 0, now, 0.01);
+            setTarget(compressor.release, 0.05, now, 0.01); 
+        }
+
+    }, [audioContext, masterCompressorOn, masterCompressorParams]);
 
 
     // --- 2. Initialize Persistent Synth Graph (Separate Effect) ---

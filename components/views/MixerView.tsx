@@ -31,6 +31,16 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
     // FX Sub-navigation
     const [fxSubTab, setFxSubTab] = useState<'MAIN' | 'ROUTE' | 'SNAP'>('MAIN');
 
+    // NEW: State for jump visual feedback
+    const [flashPad, setFlashPad] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (flashPad !== null) {
+            const timer = setTimeout(() => setFlashPad(null), 200);
+            return () => clearTimeout(timer);
+        }
+    }, [flashPad]);
+
     useEffect(() => {
         setSubTabs([
             { label: 'Mixer', onClick: () => setViewMode('mixer'), isActive: viewMode === 'mixer' },
@@ -220,6 +230,12 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
             type: ActionType.SET_FX_AUTOMATION_LOOP, 
             payload: { slotIndex: activeSlotIndex, bar: null } 
         });
+    };
+
+    const handleClearAutomation = () => {
+        if (window.confirm(`Clear all automation for FX Slot ${activeSlotIndex + 1}?`)) {
+            dispatch({ type: ActionType.CLEAR_FX_AUTOMATION, payload: { slotIndex: activeSlotIndex } });
+        }
     };
 
 
@@ -423,6 +439,7 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
                                 const currentMode = performanceFx.slots[activeSlotIndex].xyPads[idx].automation.recordMode;
                                 if (currentMode === 'from-bar-start') {
                                     dispatch({ type: ActionType.JUMP_FX_AUTOMATION, payload: { bar: automationClock.bar } });
+                                    setFlashPad(idx); // Trigger flash
                                 }
                                 dispatch({ type: ActionType.SET_FX_AUTOMATION_RECORDING, payload: { slotIndex: activeSlotIndex, padIndex: idx, isRecording: true } });
                             }}
@@ -431,18 +448,25 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
                             }}
                             color={idx % 2 === 0 ? 'bg-pink-400' : 'bg-sky-400'}
                             isRecording={pad.automation.recording}
+                            isFlashing={flashPad === idx}
                         />
                     ))}
                 </div>
 
                 {/* Automation Controls: REC MODE */}
-                <div className="bg-white p-2 rounded-lg shadow-sm flex items-center justify-center space-x-4">
+                <div className="bg-white p-2 rounded-lg shadow-sm flex items-center justify-center space-x-2">
                     <span className="text-xs font-bold text-slate-500">REC MODE</span>
                     <button
                         onClick={handleRecModeToggle}
-                        className="bg-emerald-200 text-emerald-800 font-bold text-xs px-4 py-2 rounded-md hover:bg-emerald-300 transition-colors"
+                        className="bg-emerald-200 text-emerald-800 font-bold text-xs px-3 py-1.5 rounded-md hover:bg-emerald-300 transition-colors"
                     >
                         {recordMode === 'from-bar-start' ? 'FROM START' : 'PUNCH IN'}
+                    </button>
+                    <button
+                        onClick={handleClearAutomation}
+                        className="bg-rose-200 text-rose-800 font-bold text-xs px-3 py-1.5 rounded-md hover:bg-rose-300 transition-colors"
+                    >
+                        CLEAR
                     </button>
                 </div>
                 

@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, useEffect, useCallback } from 'react';
 import { AppContext } from '../../context/AppContext';
 import { db, Project, StorableSample, SampleKit, BankPreset, audioBufferToStorable, storableToAudioBuffer, Session } from '../../db';
@@ -444,31 +443,6 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
     return (
         <div className="p-2 space-y-3 h-full overflow-y-auto">
             {isManualOpen && <ManualModal onClose={() => setIsManualOpen(false)} />}
-            
-            <div className="bg-white p-2 rounded-lg shadow-md space-y-2">
-                <h3 className="font-bold text-slate-700 text-center mb-1">起動時の設定 (Startup Settings)</h3>
-                <p className="text-xs text-slate-500 text-center -mt-1 mb-2">現在のシンセ設定をアプリ起動時の初期状態として保存します。</p>
-                <div className="grid grid-cols-2 gap-2">
-                    <button onClick={handleSaveUserDefaultSynth} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded text-xs">現在の設定を保存<br/>(Save Current as Default)</button>
-                    <button onClick={handleLoadUserDefaultSynth} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 rounded text-xs">デフォルト設定をロード<br/>(Apply & Force Save)</button>
-                    <button onClick={handleClearUserDefaultSynth} className="bg-slate-400 hover:bg-slate-500 text-white font-bold py-2 rounded text-xs col-span-2">設定を初期化<br/>(Reset to Factory)</button>
-                </div>
-                
-                <div className="flex items-center justify-between border-t border-emerald-100 pt-2 mt-2">
-                    <label className="flex items-center space-x-2 text-xs font-bold text-slate-600 cursor-pointer">
-                        <input 
-                            type="checkbox" 
-                            checked={startWithDefault} 
-                            onChange={toggleStartupMode}
-                            className="form-checkbox h-4 w-4 text-emerald-500 rounded focus:ring-emerald-400"
-                        />
-                        <span>常にデフォルトで起動<br/><span className="text-[10px] font-normal text-slate-400">(前回の続きを無視)</span></span>
-                    </label>
-                    <button onClick={handleDeleteSessionAndReload} className="bg-rose-100 text-rose-600 border border-rose-200 hover:bg-rose-200 text-[10px] font-bold px-2 py-1 rounded">
-                        セッション削除<br/>& Reload
-                    </button>
-                </div>
-            </div>
 
             <div className="bg-white p-2 rounded-lg shadow-md space-y-2">
                 <h3 className="font-bold text-slate-700 text-center mb-1">プロジェクト管理</h3>
@@ -504,6 +478,31 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
                 </ul>
             </div>
             
+            <div className="bg-white p-2 rounded-lg shadow-md space-y-2">
+                <h3 className="font-bold text-slate-700 text-center mb-1">起動時の設定 (Startup Settings)</h3>
+                <p className="text-xs text-slate-500 text-center -mt-1 mb-2">現在のシンセ設定をアプリ起動時の初期状態として保存します。</p>
+                <div className="grid grid-cols-2 gap-2">
+                    <button onClick={handleSaveUserDefaultSynth} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded text-xs">現在の設定を保存<br/>(Save Current as Default)</button>
+                    <button onClick={handleLoadUserDefaultSynth} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 rounded text-xs">デフォルト設定をロード<br/>(Apply & Force Save)</button>
+                    <button onClick={handleClearUserDefaultSynth} className="bg-slate-400 hover:bg-slate-500 text-white font-bold py-2 rounded text-xs col-span-2">設定を初期化<br/>(Reset to Factory)</button>
+                </div>
+                
+                <div className="flex items-center justify-between border-t border-emerald-100 pt-2 mt-2">
+                    <label className="flex items-center space-x-2 text-xs font-bold text-slate-600 cursor-pointer">
+                        <input 
+                            type="checkbox" 
+                            checked={startWithDefault} 
+                            onChange={toggleStartupMode}
+                            className="form-checkbox h-4 w-4 text-emerald-500 rounded focus:ring-emerald-400"
+                        />
+                        <span>常にデフォルトで起動<br/><span className="text-[10px] font-normal text-slate-400">(前回の続きを無視)</span></span>
+                    </label>
+                    <button onClick={handleDeleteSessionAndReload} className="bg-rose-100 text-rose-600 border border-rose-200 hover:bg-rose-200 text-[10px] font-bold px-2 py-1 rounded">
+                        セッション削除<br/>& Reload
+                    </button>
+                </div>
+            </div>
+
             <div className="bg-white p-2 rounded-lg shadow-md">
                 <button onClick={() => setIsManualOpen(true)} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 rounded">
                     マニュアル
