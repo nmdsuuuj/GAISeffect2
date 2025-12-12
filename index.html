@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Groove Sampler</title>
+    <link rel="manifest" href="/manifest.json" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -khtml-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* Base styles for ALL range inputs - NEW SLIMMER DEFAULT */
+      input[type="range"] {
+        cursor: pointer;
+        outline: none;
+        border-radius: 1rem;
+        background: transparent;
+      }
+
+      /* Styles for HORIZONTAL fader */
+      .horizontal-fader {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 1.25rem; /* h-5 */
+      }
+
+      /* Styles for VERTICAL fader */
+      .vertical-fader {
+        -webkit-appearance: slider-vertical;
+        width: 1.25rem; /* w-5 */
+        height: 100%;
+      }
+
+      /* Webkit track/thumb styles (apply to both) */
+      input[type="range"]::-webkit-slider-runnable-track {
+        height: 1.25rem;
+        background: #34d399; /* emerald-400 */
+        border-radius: 1rem;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        margin-top: 0.125rem; /* center thumb on horizontal track */
+        height: 1rem; /* h-4 */
+        width: 1rem;  /* w-4 */
+        background-color: #ec4899; /* pink-500 */
+        border-radius: 50%;
+        border: 2px solid #fff;
+      }
+      .vertical-fader::-webkit-slider-thumb {
+         margin-left: 0.125rem; /* Re-center thumb on vertical track */
+         margin-top: 0;
+      }
+
+      /* Firefox track/thumb styles (apply to both) */
+      input[type="range"]::-moz-range-track {
+        height: 1.25rem;
+        background: #34d399; /* emerald-400 */
+        border-radius: 1rem;
+      }
+      input[type="range"]::-moz-range-thumb {
+        height: 1rem;
+        width: 1rem;
+        background-color: #ec4899; /* pink-500 */
+        border-radius: 50%;
+        border: none;
+      }
+
+      @keyframes toast-in {
+        from {
+          transform: translateY(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+      .toast-notification {
+        animation: toast-in 0.3s ease-out forwards;
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "vite": "https://aistudiocdn.com/vite@^7.2.2",
+    "dexie": "https://aistudiocdn.com/dexie@^4.2.1"
+  }
+}
+</script>
+</head>
+  <body class="bg-emerald-50 text-slate-800">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
