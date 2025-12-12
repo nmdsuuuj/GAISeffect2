@@ -1,5 +1,5 @@
 {
-  "name": "Copy of Groove Sampler2",
+  "name": "Auto Groove Sampler2",
   "description": "An advanced sampler and sequencer for mobile browsers, featuring a powerful groove engine for creating unique rhythms. Record sounds, arrange patterns, and manipulate your beats with detailed controls.",
   "requestFramePermissions": [
     "microphone"
