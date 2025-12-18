@@ -136,8 +136,8 @@ export const useAudioEngine = () => {
     const masterChunksRef = useRef<Blob[]>([]);
     const masterDestNodeRef = useRef<MediaStreamAudioDestinationNode | null>(null);
     const currentMicStreamRef = useRef<MediaStream | null>(null);
-    const currentMicSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-    const currentScriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+    // const currentMicSourceRef = useRef<MediaStreamAudioSourceNode | null>(null); // Unused currently
+    // const currentScriptProcessorRef = useRef<ScriptProcessorNode | null>(null); // Unused currently
 
     const synthGraphRef = useRef<{ nodes: SynthGraphNodes; osc1Type: string; osc2Type: string; } | null>(null);
     const lfoAnalysersRef = useRef<{ lfo1: AnalyserNode | null; lfo2: AnalyserNode | null }>({ lfo1: null, lfo2: null });
@@ -147,7 +147,8 @@ export const useAudioEngine = () => {
     
     // Core Infrastructure Initialization
     useEffect(() => {
-        if (audioContext && !masterGainRef.current && fxChain.isReady) {
+        // Explicitly check for FX input/output nodes to ensure they are created
+        if (audioContext && !masterGainRef.current && fxChain.isReady && fxChain.inputNode && fxChain.outputNode) {
             const compressor = audioContext.createDynamicsCompressor();
             masterCompressorRef.current = compressor;
 
@@ -161,7 +162,7 @@ export const useAudioEngine = () => {
             masterGain.connect(audioContext.destination);
             masterGainRef.current = masterGain;
 
-            fxChain.outputNode!.connect(compressor);
+            fxChain.outputNode.connect(compressor);
             compressor.connect(clipper);
             clipper.connect(masterGain);
 
@@ -171,7 +172,7 @@ export const useAudioEngine = () => {
                 const gain = audioContext.createGain();
                 const pan = audioContext.createStereoPanner();
                 gain.connect(pan);
-                pan.connect(fxChain.inputNode!); 
+                pan.connect(fxChain.inputNode); 
                 bankGains.push(gain);
                 bankPanners.push(pan);
             }
@@ -193,7 +194,7 @@ export const useAudioEngine = () => {
             }
             lpFilterNodesRef.current = lpFs; hpFilterNodesRef.current = hpFs; sampleGainsRef.current = sGs;
         }
-    }, [audioContext, fxChain.isReady]);
+    }, [audioContext, fxChain.isReady, fxChain.inputNode, fxChain.outputNode]);
 
     useEffect(() => {
         if (!audioContext || bankGainsRef.current.length === 0) return;
@@ -317,11 +318,124 @@ export const useAudioEngine = () => {
         setTarget(eG, 0, now+safe(attack,0.01)+safe(decay,0.2), 0.2);
     }, [audioContext]);
 
-    // ... (rest of the ENGINE code like startRecording remains essentially the same)
+    const scheduleLfoRetrigger = useCallback((lfoIndex: number, time: number) => {
+        if (!synthGraphRef.current || !audioContext) return;
+        // Standard OscillatorNodes cannot be retriggered (phase reset) without using AudioWorklets or recreating nodes.
+        // Keeping this function stub ensures sequencer compatibility.
+    }, [audioContext]);
+
+    const loadSampleFromBlob = useCallback(async (blob: Blob, sampleId: number, name?: string) => {
+        if (!audioContext) return;
+        try {
+            const arrayBuffer = await blob.arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            
+            dispatch({ type: ActionType.UPDATE_SAMPLE_PARAM, payload: { sampleId, param: 'buffer', value: audioBuffer } });
+            if (name) {
+                dispatch({ type: ActionType.UPDATE_SAMPLE_PARAM, payload: { sampleId, param: 'name', value: name } });
+            }
+            dispatch({ type: ActionType.SHOW_TOAST, payload: 'Sample Loaded' });
+        } catch (e) {
+            console.error(e);
+            dispatch({ type: ActionType.SHOW_TOAST, payload: 'Error loading sample' });
+        }
+    }, [audioContext, dispatch]);
+
+    const startRecording = useCallback(async () => {
+        if (!audioContext) return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            currentMicStreamRef.current = stream;
+            const recorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = recorder;
+            audioChunksRef.current = [];
+
+            recorder.ondataavailable = (e) => {
+                audioChunksRef.current.push(e.data);
+            };
+
+            recorder.onstop = () => {
+                const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' }); 
+                // Load into active sample
+                loadSampleFromBlob(blob, stateRef.current.activeSampleId, "New Recording");
+                
+                // Cleanup
+                stream.getTracks().forEach(t => t.stop());
+            };
+
+            recorder.start();
+            dispatch({ type: ActionType.SET_RECORDING_STATE, payload: true });
+        } catch (e) {
+            console.error("Mic access denied", e);
+            dispatch({ type: ActionType.SHOW_TOAST, payload: "Mic access denied" });
+        }
+    }, [audioContext, dispatch, loadSampleFromBlob]);
+
+    const stopRecording = useCallback(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+            dispatch({ type: ActionType.SET_RECORDING_STATE, payload: false });
+            dispatch({ type: ActionType.SET_ARMED_STATE, payload: false });
+        }
+    }, [dispatch]);
+
+    const startMasterRecording = useCallback(() => {
+        if (!audioContext || !masterGainRef.current) return;
+        
+        if (!masterDestNodeRef.current) {
+            masterDestNodeRef.current = audioContext.createMediaStreamDestination();
+            masterGainRef.current.connect(masterDestNodeRef.current);
+        }
+
+        const recorder = new MediaRecorder(masterDestNodeRef.current.stream);
+        masterRecorderRef.current = recorder;
+        masterChunksRef.current = [];
+
+        recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) masterChunksRef.current.push(e.data);
+        };
+
+        recorder.onstop = () => {
+            const blob = new Blob(masterChunksRef.current, { type: 'audio/wav' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            a.download = `GrooveSampler_Master_${timestamp}.wav`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        };
+
+        recorder.start();
+        dispatch({ type: ActionType.TOGGLE_MASTER_RECORDING });
+    }, [audioContext, dispatch]);
+
+    const stopMasterRecording = useCallback(() => {
+        if (masterRecorderRef.current && masterRecorderRef.current.state !== 'inactive') {
+            masterRecorderRef.current.stop();
+            dispatch({ type: ActionType.TOGGLE_MASTER_RECORDING });
+        }
+    }, [dispatch]);
+
+    const flushAllSources = useCallback(() => {
+        activeSourcesRef.current.forEach((sources) => {
+            sources.forEach(src => {
+                try { src.stop(); } catch(e){}
+            });
+            sources.clear();
+        });
+    }, []);
     
     return { 
-        playSample, playSynthNote, scheduleLfoRetrigger: (idx:any, t:any)=> {}, loadSampleFromBlob: async (b:any, i:any, n:any)=>{}, 
-        startRecording: async ()=>{}, stopRecording: ()=>{}, startMasterRecording: ()=>{}, stopMasterRecording: ()=>{}, flushAllSources: ()=>{}, 
+        playSample, 
+        playSynthNote, 
+        scheduleLfoRetrigger, 
+        loadSampleFromBlob, 
+        startRecording, 
+        stopRecording, 
+        startMasterRecording, 
+        stopMasterRecording, 
+        flushAllSources, 
         lfoAnalysers: lfoAnalysersRef 
     };
 };

@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useContext, useMemo } from 'react';
+import { useEffect, useRef, useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext';
 import { FXType, FilterFXParams, GlitchParams, StutterParams, ReverbParams, DJLooperParams } from '../types';
 import { EXTENDED_DIVISIONS } from '../constants';
@@ -40,6 +40,7 @@ export const useFxChain = () => {
     const { state } = useContext(AppContext);
     const { audioContext, performanceFx, bpm } = state;
 
+    const [isReady, setIsReady] = useState(false);
     const chainInputRef = useRef<GainNode | null>(null);
     const chainOutputRef = useRef<GainNode | null>(null);
     const slotNodesRef = useRef<SlotNodes[]>([]);
@@ -70,6 +71,7 @@ export const useFxChain = () => {
             slots.push({ inputNode, outputNode, wetGain, dryGain, effectInput, effectOutput });
         }
         slotNodesRef.current = slots;
+        setIsReady(true);
     }, [audioContext]);
 
     const createEffectInstance = (type: FXType, slotIndex: number, ctx: AudioContext): EffectInstance | null => {
@@ -99,13 +101,14 @@ export const useFxChain = () => {
                     setTarget(filter.frequency, 20 * Math.pow(20000 / 20, safe(params.cutoff, 1)), now, 0.02);
                     setTarget(filter.Q, safe(params.resonance, 0) * 30, now, 0.02);
                     const div = EXTENDED_DIVISIONS[Math.floor(safe(params.lfoRate, 0))] || EXTENDED_DIVISIONS[0];
-                    setTarget(lfo.frequency, (currentBpm || 120) / (60 * (div.value * 4)), now, 0.02);
+                    const safeBpm = Math.max(20, currentBpm || 120);
+                    setTarget(lfo.frequency, safeBpm / (60 * (div.value * 4)), now, 0.02);
                     setTarget(lfoGain.gain, safe(params.lfoAmount, 0) * 2000, now, 0.02); 
                 }
             };
         } 
         else if (type === 'glitch') {
-            const processor = ctx.createScriptProcessor(512, 2, 2);
+            const processor = ctx.createScriptProcessor(1024, 2, 2);
             let currentParams: GlitchParams = { crush: 0, rate: 0, shuffle: 0, mix: 1 };
             let active = false;
             let holdL = 0, holdR = 0, sampleCounter = 0;
@@ -136,8 +139,10 @@ export const useFxChain = () => {
             return { type, nodes, inputNode, updateParams: (params, _, __, isOn) => { currentParams = params; active = isOn; } };
         }
         else if (type === 'stutter') {
-            const processor = ctx.createScriptProcessor(512, 2, 2);
-            const rSize = ctx.sampleRate * 4, rL = new Float32Array(rSize), rR = new Float32Array(rSize);
+            const processor = ctx.createScriptProcessor(1024, 2, 2);
+            // Increased buffer to ~20 seconds to prevent overflow with long loops at slow BPM
+            const rSize = ctx.sampleRate * 20; 
+            const rL = new Float32Array(rSize), rR = new Float32Array(rSize);
             const bL = new Float32Array(rSize), bR = new Float32Array(rSize);
             let wIdx = 0, isStut = false, curP: StutterParams = { division: 12, speed: 1, feedback: 0, mix: 1 };
             let bpm = 120, len = 0, pIdx = 0, lastDiv = -1, active = false;
@@ -151,9 +156,17 @@ export const useFxChain = () => {
                 if (freeze && (!isStut || curP.division !== lastDiv)) {
                     isStut = true; pIdx = 0; lastDiv = curP.division;
                     const div = EXTENDED_DIVISIONS[Math.floor(safe(curP.division) * (EXTENDED_DIVISIONS.length-1))] || EXTENDED_DIVISIONS[0];
-                    len = Math.max(128, Math.floor(((ctx.sampleRate * 60)/bpm) * div.value));
+                    const safeBpm = Math.max(20, bpm || 120);
+                    
+                    // Clamp length to buffer size to prevent buffer overflow (NaN generation)
+                    const calculatedLen = Math.floor(((ctx.sampleRate * 60)/safeBpm) * div.value);
+                    len = Math.min(rSize, Math.max(128, calculatedLen));
+
                     let rp = (wIdx - len + rSize) % rSize;
-                    for (let i = 0; i < len; i++) { bL[i] = rL[rp]; bR[i] = rR[rp]; rp = (rp + 1) % rSize; }
+                    for (let i = 0; i < len; i++) { 
+                        bL[i] = rL[rp]; bR[i] = rR[rp]; 
+                        rp = (rp + 1) % rSize; 
+                    }
                 } else if (!freeze) isStut = false;
 
                 for (let i = 0; i < processor.bufferSize; i++) {
@@ -161,10 +174,16 @@ export const useFxChain = () => {
                     if (isStut && len > 0) {
                         const spd = (safe(curP.speed, 0.75) - 0.5) * 4;
                         const idx = Math.floor(pIdx);
-                        let sL = bL[idx % len], sR = bR[idx % len];
+                        // Wrap index safely
+                        const safeIdx = ((idx % len) + len) % len;
+                        
+                        let sL = bL[safeIdx], sR = bR[safeIdx];
                         const f = 200;
-                        if (pIdx < f) { const sc = pIdx/f; sL *= sc; sR *= sc; }
-                        else if (pIdx > len - f) { const sc = (len-pIdx)/f; sL *= sc; sR *= sc; }
+                        // Micro-fade to prevent clicks at loop boundaries
+                        const loopPos = pIdx % len;
+                        if (loopPos < f) { const sc = loopPos/f; sL *= sc; sR *= sc; }
+                        else if (loopPos > len - f) { const sc = (len-loopPos)/f; sL *= sc; sR *= sc; }
+                        
                         outL[i] = sL; outR[i] = sR;
                         pIdx = (pIdx + spd + len) % len;
                     } else { outL[i] = inL[i]; outR[i] = inR[i]; }
@@ -205,36 +224,98 @@ export const useFxChain = () => {
             }};
         }
         else if (type === 'djLooper') {
-            const processor = ctx.createScriptProcessor(512, 2, 2);
-            const rSize = ctx.sampleRate * 4, rL = new Float32Array(rSize), rR = new Float32Array(rSize);
+            const processor = ctx.createScriptProcessor(1024, 2, 2);
+            const rSize = ctx.sampleRate * 20;
+            const rL = new Float32Array(rSize), rR = new Float32Array(rSize);
             const bL = new Float32Array(rSize), bR = new Float32Array(rSize);
             let wIdx = 0, loopLen = 0, pIdx = 0, isLoop = false, bpm = 120, lastDiv = -1, lastMult = -1, active = false;
             let curP: DJLooperParams = { loopDivision: 12, lengthMultiplier: 1, fadeTime: 0.01, mix: 1 };
+            
+            // Smoothing variables
+            let currentCrossfade = 0; // 0 = Dry, 1 = Wet (Loop)
+            const CROSSFADE_SPEED = 0.05; // Per buffer process (approx 20 buffers = 1s? No, logic depends on buffer size) 
+            // 1024 samples / 44100 = 23ms. 0.05 increment -> ~0.5s fade. Too slow.
+            // Let's use sample-accurate crossfade inside the loop.
 
             processor.onaudioprocess = (e) => {
                 const inL = e.inputBuffer.getChannelData(0), inR = e.inputBuffer.getChannelData(1);
                 const outL = e.outputBuffer.getChannelData(0), outR = e.outputBuffer.getChannelData(1);
                 if (!active) { outL.set(inL); outR.set(inR); return; }
 
-                const should = safe(curP.mix) > 0.1;
-                if (should && (!isLoop || curP.loopDivision !== lastDiv || curP.lengthMultiplier !== lastMult)) {
-                    isLoop = true; pIdx = 0; lastDiv = curP.loopDivision; lastMult = curP.lengthMultiplier;
-                    const div = EXTENDED_DIVISIONS[Math.floor(safe(curP.loopDivision) * (EXTENDED_DIVISIONS.length-1))] || EXTENDED_DIVISIONS[0];
-                    loopLen = Math.max(256, Math.floor(((ctx.sampleRate * 60)/bpm) * div.value * (1 + Math.floor(safe(curP.lengthMultiplier) * 7))));
-                    let rp = (wIdx - loopLen + rSize) % rSize;
-                    for (let i = 0; i < loopLen; i++) { bL[i] = rL[rp]; bR[i] = rR[rp]; rp = (rp + 1) % rSize; }
-                } else if (!should) isLoop = false;
+                const shouldLoop = safe(curP.mix) > 0.05; // Lower threshold for instant engagement
+                
+                // Trigger logic with Debounce/Stability check
+                // We only re-trigger if the division changes intentionally or we just started looping.
+                if (shouldLoop) {
+                    if (!isLoop || curP.loopDivision !== lastDiv || curP.lengthMultiplier !== lastMult) {
+                        // Capture!
+                        isLoop = true; 
+                        pIdx = 0; // Reset playback head
+                        lastDiv = curP.loopDivision; 
+                        lastMult = curP.lengthMultiplier;
+                        
+                        const div = EXTENDED_DIVISIONS[Math.floor(safe(curP.loopDivision) * (EXTENDED_DIVISIONS.length-1))] || EXTENDED_DIVISIONS[0];
+                        const safeBpm = Math.max(20, bpm || 120);
+                        const calculatedLen = Math.floor(((ctx.sampleRate * 60)/safeBpm) * div.value * (1 + Math.floor(safe(curP.lengthMultiplier) * 7)));
+                        loopLen = Math.min(rSize, Math.max(256, calculatedLen));
+
+                        // Capture immediately preceding audio
+                        let rp = (wIdx - loopLen + rSize) % rSize;
+                        for (let i = 0; i < loopLen; i++) { 
+                            bL[i] = rL[rp]; bR[i] = rR[rp]; 
+                            rp = (rp + 1) % rSize; 
+                        }
+                    }
+                } else {
+                    isLoop = false;
+                    lastDiv = -1; // Reset to allow immediate re-trigger with same params
+                }
 
                 for (let i = 0; i < processor.bufferSize; i++) {
+                    // Always record to ring buffer
                     rL[wIdx] = inL[i]; rR[wIdx] = inR[i]; wIdx = (wIdx + 1) % rSize;
-                    if (isLoop && loopLen > 0) {
-                        let sL = bL[pIdx], sR = bR[pIdx];
-                        const f = 250;
-                        if (pIdx < f) { const sc = pIdx/f; sL *= sc; sR *= sc; }
-                        else if (pIdx > loopLen - f) { const sc = (loopLen-pIdx)/f; sL *= sc; sR *= sc; }
-                        outL[i] = sL; outR[i] = sR;
+
+                    // Slew limiter for crossfade state (0.0 to 1.0)
+                    // Fast attack (engage), fast release (disengage) but smooth
+                    const target = shouldLoop ? 1.0 : 0.0;
+                    if (currentCrossfade < target) currentCrossfade += 0.005; // Attack ~5ms
+                    else if (currentCrossfade > target) currentCrossfade -= 0.005; // Release ~5ms
+                    
+                    // Clamp
+                    if (currentCrossfade > 1) currentCrossfade = 1;
+                    if (currentCrossfade < 0) currentCrossfade = 0;
+
+                    let outSampleL = inL[i];
+                    let outSampleR = inR[i];
+
+                    if (loopLen > 0 && currentCrossfade > 0) {
+                        const safeIdx = ((pIdx % loopLen) + loopLen) % loopLen;
+                        let sL = bL[safeIdx];
+                        let sR = bR[safeIdx];
+                        
+                        // Micro-fade at loop boundaries to prevent clicks
+                        const fadeLen = Math.min(256, loopLen >> 2); // Dynamic fade length
+                        if (pIdx < fadeLen) { 
+                            // Fade In
+                            const gain = pIdx / fadeLen;
+                            sL *= gain; sR *= gain;
+                        } else if (pIdx > loopLen - fadeLen) {
+                            // Fade Out
+                            const gain = (loopLen - pIdx) / fadeLen;
+                            sL *= gain; sR *= gain;
+                        }
+
+                        // Crossfade Dry/Wet
+                        // Linear crossfade: Out = (Dry * (1-Mix)) + (Wet * Mix)
+                        // This prevents volume doubling and phase issues when mix is 50%
+                        outSampleL = (inL[i] * (1 - currentCrossfade)) + (sL * currentCrossfade);
+                        outSampleR = (inR[i] * (1 - currentCrossfade)) + (sR * currentCrossfade);
+                        
                         pIdx = (pIdx + 1) % loopLen;
-                    } else { outL[i] = inL[i]; outR[i] = inR[i]; }
+                    }
+
+                    outL[i] = outSampleL;
+                    outR[i] = outSampleR;
                 }
             };
             slotNodes.effectInput.connect(processor);
@@ -298,6 +379,6 @@ export const useFxChain = () => {
     return { 
         inputNode: chainInputRef.current, 
         outputNode: chainOutputRef.current,
-        isReady: !!chainInputRef.current 
+        isReady: isReady // Return state
     };
 };
