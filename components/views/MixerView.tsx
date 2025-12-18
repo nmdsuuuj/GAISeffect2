@@ -163,20 +163,9 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
 
     const handleXYUpdate = (padIndex: number, x: number, y: number) => {
         // Live parameter update
+        // We do NOT record here anymore. Recording is handled by the automation loop (useAutomationEngine).
+        // This ensures recording is continuous even if the finger doesn't move.
         dispatch({ type: ActionType.UPDATE_FX_XY, payload: { slotIndex: activeSlotIndex, padIndex, x, y } });
-
-        // Check if this pad is recording and if so, record the automation point
-        const pad = performanceFx.slots[activeSlotIndex].xyPads[padIndex];
-        if (pad.automation.recording) {
-            dispatch({
-                type: ActionType.RECORD_FX_AUTOMATION_POINT,
-                payload: {
-                    slotIndex: activeSlotIndex,
-                    padIndex,
-                    point: { position: automationClock.position, x, y }
-                }
-            });
-        }
     };
 
     const handleFxRoutingChange = (currentIndex: number, direction: -1 | 1) => {
@@ -397,6 +386,7 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
         if (!activeSlot) return null;
         const params = activeSlot.params;
         const recordMode = activeSlot.xyPads[0]?.automation.recordMode || 'from-bar-start';
+        const isSlotRecording = activeSlot.xyPads.some(pad => pad.automation.recording);
 
         const handleRecModeToggle = () => {
             const newMode = recordMode === 'from-bar-start' ? 'punch-in' : 'from-bar-start';
@@ -426,7 +416,14 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
 
                 {/* XY Pads */}
                 <div className="grid grid-cols-2 gap-2 h-36 flex-shrink-0">
-                    {activeSlot.xyPads.map((pad, idx) => (
+                    {activeSlot.xyPads.map((pad, idx) => {
+                        const isRecording = pad.automation.recording;
+                        const hasData = pad.automation.data.length > 0;
+                        let puckColor = 'bg-white';
+                        if (isRecording) puckColor = 'bg-rose-500';
+                        else if (hasData) puckColor = 'bg-sky-500';
+
+                        return (
                         <XYPad
                             key={idx}
                             x={pad.x}
@@ -446,11 +443,11 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
                             onInteractionEnd={() => {
                                 dispatch({ type: ActionType.SET_FX_AUTOMATION_RECORDING, payload: { slotIndex: activeSlotIndex, padIndex: idx, isRecording: false } });
                             }}
-                            color={idx % 2 === 0 ? 'bg-pink-400' : 'bg-sky-400'}
+                            color={puckColor}
                             isRecording={pad.automation.recording}
                             isFlashing={flashPad === idx}
                         />
-                    ))}
+                    )})}
                 </div>
 
                 {/* Automation Controls: REC MODE */}
@@ -482,6 +479,9 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
                             );
                             
                             const isLooping = activeSlot.xyPads.some(pad => pad.automation.loopBar === i);
+                            
+                            // Check if recording is active for this slot, and playhead is in this bar
+                            const isRecording = isSlotRecording && automationClock.bar === i;
 
                             return (
                                 <BarPad
@@ -489,6 +489,7 @@ const MixerView: React.FC<MixerViewProps> = ({ startMasterRecording, stopMasterR
                                     barIndex={i}
                                     isActive={automationClock.bar === i}
                                     isLooping={isLooping}
+                                    isRecording={isRecording}
                                     hasAutomation={hasAutomation}
                                     onTap={handleBarTap}
                                     onSwipeUp={handleBarSwipeUp}

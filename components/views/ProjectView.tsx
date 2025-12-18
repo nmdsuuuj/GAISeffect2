@@ -221,7 +221,7 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
         // Exclude non-serializable or transient properties
         const propertiesToDelete: (keyof AppState)[] = [
             'audioContext', 'isInitialized', 'isPlaying', 'isRecording', 
-            'isArmed', 'currentSteps', 'samples', 'grooves', 'isLoading',
+            'isArmed', 'currentSteps', 'samples', 'isLoading',
             'isMasterRecording', 'isMasterRecArmed', 'toastMessage'
         ];
         propertiesToDelete.forEach(prop => delete (stateToSave as Partial<AppState>)[prop]);
@@ -378,7 +378,7 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
         const stateToSave = { ...state };
         const propertiesToDelete: (keyof AppState)[] = [
             'audioContext', 'isInitialized', 'isPlaying', 'isRecording', 
-            'isArmed', 'currentSteps', 'samples', 'grooves', 'isLoading',
+            'isArmed', 'currentSteps', 'samples', 'isLoading',
             'isMasterRecording', 'isMasterRecArmed', 'toastMessage'
         ];
         propertiesToDelete.forEach(prop => delete (stateToSave as Partial<AppState>)[prop]);

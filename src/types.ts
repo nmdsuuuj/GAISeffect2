@@ -264,7 +264,7 @@ export interface PerformanceChain {
     slots: PerformanceEffect[];
     routing: number[];
     globalSnapshots: GlobalSnapshot[];
-    jumpToBar: { barIndex: number; triggerId: number } | null;
+    jumpToBar: number | null;
 }
 
 export interface FilterFXParams {
@@ -294,13 +294,6 @@ export interface ReverbParams {
     size: number;
     damping: number;
     mod: number;
-    mix: number;
-}
-
-export interface DJLooperParams {
-    loopDivision: number;
-    lengthMultiplier: number;
-    fadeTime: number;
     mix: number;
 }
 
@@ -337,9 +330,6 @@ export interface AppState {
     // Data
     samples: Sample[];
     sampleClipboard: Sample | null;
-    laneClipboard: { steps: Step[]; paramLocks: Pattern['paramLocks'][number] } | null;
-    bankClipboard: { sequences: Step[][]; paramLocks: Pattern['paramLocks']; grooveId: number; grooveDepth: number; } | null;
-    patternClipboard: Pattern | null;
     patterns: Pattern[];
     activePatternIds: number[]; 
     

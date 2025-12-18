@@ -1,3 +1,4 @@
+
 import { Groove, BiquadFilterType, PerformanceChain, FXAutomation, PerformanceEffect, FXType } from "./types";
 
 export const PAD_SIZE = 'w-8 h-8';
@@ -207,7 +208,7 @@ export const EXTENDED_DIVISIONS = [
     { label: '1/64', value: 0.0625 },
 ];
 
-export const FX_TYPES: FXType[] = ['stutter', 'glitch', 'filter', 'reverb', 'djLooper'];
+export const FX_TYPES: FXType[] = ['djLooper', 'stutter', 'glitch', 'filter', 'reverb'];
 
 const createDefaultAutomation = (): FXAutomation => ({
     active: false,
@@ -234,7 +235,7 @@ export const createDefaultEffect = (type: FXType): PerformanceEffect<any> => {
                 params: { division: 12, speed: 1, feedback: 0.5, mix: 1 },
                 xyPads: [
                     { id: 0, x: 0.5, y: 0.5, xParam: 'division', yParam: 'feedback', automation: createDefaultAutomation() },
-                    { id: 1, x: 0.5, y: 0.5, xParam: 'speed', yParam: 'mix', automation: createDefaultAutomation() }
+                    { id: 1, x: 0.75, y: 0.5, xParam: 'speed', yParam: 'mix', automation: createDefaultAutomation() }
                 ]
             };
         case 'glitch':
@@ -281,7 +282,7 @@ export const createDefaultEffect = (type: FXType): PerformanceEffect<any> => {
 export const DEFAULT_PERFORMANCE_FX: PerformanceChain = {
     // Initialize 4 independent slots with a default configuration
     slots: [
-        createDefaultEffect('filter'),
+        createDefaultEffect('djLooper'), // Slot 1 changed to DJ Looper by default
         createDefaultEffect('stutter'),
         createDefaultEffect('glitch'),
         createDefaultEffect('reverb')

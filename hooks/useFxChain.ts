@@ -1,29 +1,23 @@
-import { useEffect, useRef, useContext } from 'react';
-import { AppContext } from '../context/AppContext';
-import { FXType, FilterFXParams, GlitchParams, StutterParams, ReverbParams } from '../types';
-import { EXTENDED_DIVISIONS } from '../constants';
-import { makeDistortionCurve } from '../utils/audio';
 
-// Robust safety helper
+import { useEffect, useRef, useContext, useMemo } from 'react';
+import { AppContext } from '../context/AppContext';
+import { FXType, FilterFXParams, GlitchParams, StutterParams, ReverbParams, DJLooperParams } from '../types';
+import { EXTENDED_DIVISIONS } from '../constants';
+
 const safe = (val: any, fallback: number = 0): number => {
     const n = Number(val);
     return (Number.isFinite(n) && !Number.isNaN(n)) ? n : fallback;
 };
 
-// Safe AudioParam setter
 const setTarget = (param: AudioParam, value: number, time: number, timeConstant: number) => {
     if (!param) return;
     const v = safe(value, 0);
     const t = safe(time, 0);
     const tc = Math.max(0.001, safe(timeConstant, 0.01)); 
-    
-    if (Number.isFinite(v) && Number.isFinite(t) && Number.isFinite(tc)) {
-        try {
-            param.setTargetAtTime(v, t, tc);
-        } catch (e) {
-            // ignore
-        }
-    }
+    try {
+        param.cancelScheduledValues(t);
+        param.setTargetAtTime(v, t, tc);
+    } catch (e) {}
 };
 
 interface SlotNodes {
@@ -38,7 +32,8 @@ interface SlotNodes {
 interface EffectInstance {
     type: FXType;
     nodes: AudioNode[]; 
-    updateParams: (params: any, ctx: AudioContext, bpm: number) => void;
+    inputNode: AudioNode; 
+    updateParams: (params: any, ctx: AudioContext, bpm: number, isOn: boolean) => void;
 }
 
 export const useFxChain = () => {
@@ -50,14 +45,12 @@ export const useFxChain = () => {
     const slotNodesRef = useRef<SlotNodes[]>([]);
     const activeEffectsRef = useRef<(EffectInstance | null)[]>([null, null, null, null]);
 
-    // Initialize Graph Infrastructure (Slots)
+    // Infrastructure setup (once per audio context)
     useEffect(() => {
         if (!audioContext || chainInputRef.current) return;
 
-        const chainInput = audioContext.createGain();
-        const chainOutput = audioContext.createGain();
-        chainInputRef.current = chainInput;
-        chainOutputRef.current = chainOutput;
+        chainInputRef.current = audioContext.createGain();
+        chainOutputRef.current = audioContext.createGain();
 
         const slots: SlotNodes[] = [];
         for (let i = 0; i < 4; i++) {
@@ -70,408 +63,241 @@ export const useFxChain = () => {
 
             inputNode.connect(dryGain);
             dryGain.connect(outputNode);
-
             inputNode.connect(wetGain);
             wetGain.connect(effectInput);
-            
-            // Initial pass-through connection (will be managed by effect instances)
-            effectInput.connect(effectOutput); 
             effectOutput.connect(outputNode);
 
-            slots.push({
-                inputNode,
-                outputNode,
-                wetGain,
-                dryGain,
-                effectInput,
-                effectOutput
-            });
+            slots.push({ inputNode, outputNode, wetGain, dryGain, effectInput, effectOutput });
         }
         slotNodesRef.current = slots;
-
     }, [audioContext]);
 
-    // --- Effect Instance Factory ---
     const createEffectInstance = (type: FXType, slotIndex: number, ctx: AudioContext): EffectInstance | null => {
         const slotNodes = slotNodesRef.current[slotIndex];
         if (!slotNodes) return null;
 
-        // Disconnect pass-through
-        try { slotNodes.effectInput.disconnect(slotNodes.effectOutput); } catch(e) {}
-
         const nodes: AudioNode[] = [];
+        let inputNode: AudioNode;
 
         if (type === 'filter') {
             const filter = ctx.createBiquadFilter();
             const lfo = ctx.createOscillator();
             const lfoGain = ctx.createGain();
-            
             slotNodes.effectInput.connect(filter);
             filter.connect(slotNodes.effectOutput);
-            
             lfo.connect(lfoGain);
             lfoGain.connect(filter.frequency);
             lfo.start();
-
             nodes.push(filter, lfo, lfoGain);
+            inputNode = filter;
 
             return {
-                type,
-                nodes,
+                type, nodes, inputNode,
                 updateParams: (params: FilterFXParams, context, currentBpm) => {
                     const now = context.currentTime;
                     filter.type = params.type || 'lowpass';
-                    
-                    const pCutoff = safe(params.cutoff, 1);
-                    const cutoffHz = 20 * Math.pow(20000 / 20, pCutoff);
-                    setTarget(filter.frequency, cutoffHz, now, 0.02);
-                    
+                    setTarget(filter.frequency, 20 * Math.pow(20000 / 20, safe(params.cutoff, 1)), now, 0.02);
                     setTarget(filter.Q, safe(params.resonance, 0) * 30, now, 0.02);
-                    
                     const div = EXTENDED_DIVISIONS[Math.floor(safe(params.lfoRate, 0))] || EXTENDED_DIVISIONS[0];
-                    const safeBpm = currentBpm > 0 ? currentBpm : 120;
-                    const lfoHz = safeBpm / (60 * (div.value * 4)); 
-                    
-                    setTarget(lfo.frequency, lfoHz, now, 0.02);
+                    setTarget(lfo.frequency, (currentBpm || 120) / (60 * (div.value * 4)), now, 0.02);
                     setTarget(lfoGain.gain, safe(params.lfoAmount, 0) * 2000, now, 0.02); 
                 }
             };
         } 
         else if (type === 'glitch') {
-            const bufferSize = 512; // FIX: Reduced buffer size for responsiveness
-            const processor = ctx.createScriptProcessor(bufferSize, 2, 2);
-            
+            const processor = ctx.createScriptProcessor(512, 2, 2);
             let currentParams: GlitchParams = { crush: 0, rate: 0, shuffle: 0, mix: 1 };
-            
-            let holdL = 0;
-            let holdR = 0;
-            let sampleCounter = 0;
+            let active = false;
+            let holdL = 0, holdR = 0, sampleCounter = 0;
 
             processor.onaudioprocess = (e) => {
-                const inputL = e.inputBuffer.getChannelData(0);
-                const inputR = e.inputBuffer.getChannelData(1);
-                const outputL = e.outputBuffer.getChannelData(0);
-                const outputR = e.outputBuffer.getChannelData(1);
+                const inL = e.inputBuffer.getChannelData(0), inR = e.inputBuffer.getChannelData(1);
+                const outL = e.outputBuffer.getChannelData(0), outR = e.outputBuffer.getChannelData(1);
+                if (!active) { outL.set(inL); outR.set(inR); return; }
                 
-                const rate = safe(currentParams.rate, 0);
-                const crush = safe(currentParams.crush, 0);
-                const shuffle = safe(currentParams.shuffle, 0);
+                const holdSteps = 1 + Math.floor(Math.pow(safe(currentParams.rate), 2) * 200);
+                const levels = Math.pow(2, 16 - (safe(currentParams.crush) * 15));
+                const shuffle = safe(currentParams.shuffle);
 
-                const holdSteps = 1 + Math.floor(Math.pow(rate, 2) * 100);
-                
-                const bitDepth = 16 - (crush * 15);
-                const levels = Math.pow(2, Math.max(1, bitDepth));
-
-                for (let i = 0; i < bufferSize; i++) {
+                for (let i = 0; i < processor.bufferSize; i++) {
                     if (sampleCounter % holdSteps === 0) {
-                        holdL = inputL[i];
-                        holdR = inputR[i];
-                        if (shuffle > 0 && Math.random() < shuffle * 0.1) {
-                            sampleCounter -= Math.floor(Math.random() * holdSteps);
-                        }
+                        holdL = inL[i]; holdR = inR[i];
+                        if (shuffle > 0 && Math.random() < shuffle * 0.1) sampleCounter -= Math.floor(Math.random() * holdSteps);
                     }
                     sampleCounter++;
-
-                    let valL = Math.floor(holdL * levels) / levels;
-                    let valR = Math.floor(holdR * levels) / levels;
-
-                    outputL[i] = safe(valL, 0);
-                    outputR[i] = safe(valR, 0);
+                    outL[i] = Math.floor(holdL * levels) / levels;
+                    outR[i] = Math.floor(holdR * levels) / levels;
                 }
             };
-
             slotNodes.effectInput.connect(processor);
             processor.connect(slotNodes.effectOutput);
             nodes.push(processor);
-            
-            return {
-                type,
-                nodes,
-                updateParams: (params: GlitchParams) => {
-                    currentParams = params;
-                }
-            };
+            inputNode = processor;
+            return { type, nodes, inputNode, updateParams: (params, _, __, isOn) => { currentParams = params; active = isOn; } };
         }
         else if (type === 'stutter') {
-            const bufferSize = 512; // FIX: Reduced buffer size for responsiveness
-            const processor = ctx.createScriptProcessor(bufferSize, 2, 2);
-            
-            const maxDuration = 4; 
-            const sampleRate = ctx.sampleRate;
-            const totalSamples = maxDuration * sampleRate;
-            const leftBuffer = new Float32Array(totalSamples);
-            const rightBuffer = new Float32Array(totalSamples);
-            
-            const freezeMaxSamples = sampleRate * 2; 
-            const freezeLeft = new Float32Array(freezeMaxSamples);
-            const freezeRight = new Float32Array(freezeMaxSamples);
-            
-            let writeHead = 0;
-            let freezeLength = 0;
-            let freezePlayHead = 0;
-            let isFrozen = false;
-            
-            let currentParams: StutterParams = { division: 12, speed: 1, feedback: 0, mix: 1 };
-            let currentBpm = 120;
+            const processor = ctx.createScriptProcessor(512, 2, 2);
+            const rSize = ctx.sampleRate * 4, rL = new Float32Array(rSize), rR = new Float32Array(rSize);
+            const bL = new Float32Array(rSize), bR = new Float32Array(rSize);
+            let wIdx = 0, isStut = false, curP: StutterParams = { division: 12, speed: 1, feedback: 0, mix: 1 };
+            let bpm = 120, len = 0, pIdx = 0, lastDiv = -1, active = false;
 
             processor.onaudioprocess = (e) => {
-                const inputL = e.inputBuffer.getChannelData(0);
-                const inputR = e.inputBuffer.getChannelData(1);
-                const outputL = e.outputBuffer.getChannelData(0);
-                const outputR = e.outputBuffer.getChannelData(1);
-                
-                const safeBpm = currentBpm > 0 ? currentBpm : 120;
-                const samplesPerBeat = (sampleRate * 60) / safeBpm;
-                const divConfig = EXTENDED_DIVISIONS[Math.floor(safe(currentParams.division, 0))] || EXTENDED_DIVISIONS[0];
-                const newFreezeLength = Math.max(128, Math.floor(samplesPerBeat * divConfig.value));
+                const inL = e.inputBuffer.getChannelData(0), inR = e.inputBuffer.getChannelData(1);
+                const outL = e.outputBuffer.getChannelData(0), outR = e.outputBuffer.getChannelData(1);
+                if (!active) { outL.set(inL); outR.set(inR); return; }
 
-                const shouldFreeze = safe(currentParams.feedback, 0) > 0.5;
+                const freeze = safe(curP.feedback) > 0.05;
+                if (freeze && (!isStut || curP.division !== lastDiv)) {
+                    isStut = true; pIdx = 0; lastDiv = curP.division;
+                    const div = EXTENDED_DIVISIONS[Math.floor(safe(curP.division) * (EXTENDED_DIVISIONS.length-1))] || EXTENDED_DIVISIONS[0];
+                    len = Math.max(128, Math.floor(((ctx.sampleRate * 60)/bpm) * div.value));
+                    let rp = (wIdx - len + rSize) % rSize;
+                    for (let i = 0; i < len; i++) { bL[i] = rL[rp]; bR[i] = rR[rp]; rp = (rp + 1) % rSize; }
+                } else if (!freeze) isStut = false;
 
-                if (shouldFreeze) {
-                    // FIX: Re-capture audio if we just entered freeze OR if the loop length has changed
-                    if (!isFrozen || newFreezeLength !== freezeLength) {
-                        const justStartedFreezing = !isFrozen;
-                        isFrozen = true;
-                        freezeLength = newFreezeLength;
-                        if (freezeLength > freezeMaxSamples) freezeLength = freezeMaxSamples;
-                        
-                        let readPtr = writeHead - freezeLength;
-                        if (readPtr < 0) readPtr += totalSamples;
-                        
-                        for(let j=0; j<freezeLength; j++) {
-                            freezeLeft[j] = leftBuffer[readPtr];
-                            freezeRight[j] = rightBuffer[readPtr];
-                            readPtr++;
-                            if (readPtr >= totalSamples) readPtr = 0;
-                        }
-                        
-                        // Only reset playhead when starting a new freeze, not when just resizing
-                        if (justStartedFreezing) {
-                           freezePlayHead = 0;
-                        }
-                    }
-                } else {
-                    isFrozen = false;
-                }
-
-                const speed = safe(currentParams.speed, 1);
-
-                for (let i = 0; i < bufferSize; i++) {
-                    // Always record input to the ring buffer
-                    leftBuffer[writeHead] = inputL[i];
-                    rightBuffer[writeHead] = inputR[i];
-                    writeHead++;
-                    if (writeHead >= totalSamples) writeHead = 0;
-
-                    if (isFrozen) {
-                        let idx = Math.floor(freezePlayHead);
-                        while(idx >= freezeLength) idx -= freezeLength;
-                        while(idx < 0) idx += freezeLength;
-                        
-                        outputL[i] = safe(freezeLeft[idx], 0);
-                        outputR[i] = safe(freezeRight[idx], 0);
-                        
-                        freezePlayHead += speed;
-                        if (freezePlayHead >= freezeLength) freezePlayHead -= freezeLength;
-                        if (freezePlayHead < 0) freezePlayHead += freezeLength;
-
-                    } else {
-                        outputL[i] = inputL[i];
-                        outputR[i] = inputR[i];
-                    }
+                for (let i = 0; i < processor.bufferSize; i++) {
+                    rL[wIdx] = inL[i]; rR[wIdx] = inR[i]; wIdx = (wIdx + 1) % rSize;
+                    if (isStut && len > 0) {
+                        const spd = (safe(curP.speed, 0.75) - 0.5) * 4;
+                        const idx = Math.floor(pIdx);
+                        let sL = bL[idx % len], sR = bR[idx % len];
+                        const f = 200;
+                        if (pIdx < f) { const sc = pIdx/f; sL *= sc; sR *= sc; }
+                        else if (pIdx > len - f) { const sc = (len-pIdx)/f; sL *= sc; sR *= sc; }
+                        outL[i] = sL; outR[i] = sR;
+                        pIdx = (pIdx + spd + len) % len;
+                    } else { outL[i] = inL[i]; outR[i] = inR[i]; }
                 }
             };
-
             slotNodes.effectInput.connect(processor);
             processor.connect(slotNodes.effectOutput);
             nodes.push(processor);
-
-            return {
-                type,
-                nodes,
-                updateParams: (params: StutterParams, context, bpm) => {
-                    currentParams = params;
-                    currentBpm = bpm;
-                }
-            };
+            inputNode = processor;
+            return { type, nodes, inputNode, updateParams: (p, _, b, isOn) => { curP = p; bpm = b; active = isOn; } };
         }
         else if (type === 'reverb') {
-            const input = ctx.createGain();
-            const output = ctx.createGain();
-            const reverbNodes: AudioNode[] = [input, output];
-
-            const preDelay = ctx.createDelay(0.1);
-            input.connect(preDelay);
-            reverbNodes.push(preDelay);
-
-            const combDelays = [0.0297, 0.0371, 0.0411, 0.0437, 0.0487, 0.0571]; 
-            const combOutput = ctx.createGain();
-            combOutput.gain.value = 0.2; 
-            reverbNodes.push(combOutput);
-
-            const combs: { delay: DelayNode, gain: GainNode, filter: BiquadFilterNode }[] = [];
-
-            combDelays.forEach(delayTime => {
-                const cd = ctx.createDelay(0.1);
-                const cg = ctx.createGain();
-                const cf = ctx.createBiquadFilter(); 
-                
-                cd.delayTime.value = delayTime;
-                cf.type = 'lowpass';
-                cf.Q.value = 0; 
-                
-                preDelay.connect(cf);
-                cf.connect(cd);
-                cd.connect(combOutput);
-                
-                cd.connect(cg);
-                cg.connect(cf);
-
-                reverbNodes.push(cd, cg, cf);
-                combs.push({ delay: cd, gain: cg, filter: cf });
+            const input = ctx.createGain(), output = ctx.createGain();
+            const preDelay = ctx.createDelay(0.1); input.connect(preDelay);
+            const combDelays = [0.0297, 0.0371, 0.0411, 0.0437, 0.0487, 0.0571];
+            const combOut = ctx.createGain(); combOut.gain.value = 0.2;
+            const combs: any[] = [];
+            combDelays.forEach(dt => {
+                const cd = ctx.createDelay(0.1), cg = ctx.createGain(), cf = ctx.createBiquadFilter();
+                cd.delayTime.value = dt; cf.type = 'lowpass';
+                preDelay.connect(cf); cf.connect(cd); cd.connect(combOut); cd.connect(cg); cg.connect(cf);
+                nodes.push(cd, cg, cf); combs.push({ cg, cf });
             });
-
-            const ap1 = ctx.createBiquadFilter();
-            ap1.type = 'allpass';
-            ap1.frequency.value = 1050;
-            ap1.Q.value = 0.7;
-            
-            const ap2 = ctx.createBiquadFilter();
-            ap2.type = 'allpass';
-            ap2.frequency.value = 340;
-            ap2.Q.value = 0.7;
-
-            combOutput.connect(ap1);
-            ap1.connect(ap2);
-            ap2.connect(output);
-            
-            reverbNodes.push(ap1, ap2);
-
+            const ap1 = ctx.createBiquadFilter(), ap2 = ctx.createBiquadFilter();
+            ap1.type = 'allpass'; ap1.frequency.value = 1050; ap2.type = 'allpass'; ap2.frequency.value = 340;
+            combOut.connect(ap1); ap1.connect(ap2); ap2.connect(output);
+            nodes.push(input, output, preDelay, combOut, ap1, ap2);
             slotNodes.effectInput.connect(input);
             output.connect(slotNodes.effectOutput);
+            inputNode = input;
+            return { type, nodes, inputNode, updateParams: (p, context) => {
+                const now = context.currentTime;
+                combs.forEach(c => {
+                    setTarget(c.cg.gain, 0.5 + (safe(p.size) * 0.4), now, 0.05);
+                    setTarget(c.cf.frequency, 100 + Math.pow(safe(p.damping), 2) * 8000, now, 0.05);
+                });
+                setTarget(preDelay.delayTime, 0.01 + (safe(p.mod) * 0.005), now, 0.1);
+            }};
+        }
+        else if (type === 'djLooper') {
+            const processor = ctx.createScriptProcessor(512, 2, 2);
+            const rSize = ctx.sampleRate * 4, rL = new Float32Array(rSize), rR = new Float32Array(rSize);
+            const bL = new Float32Array(rSize), bR = new Float32Array(rSize);
+            let wIdx = 0, loopLen = 0, pIdx = 0, isLoop = false, bpm = 120, lastDiv = -1, lastMult = -1, active = false;
+            let curP: DJLooperParams = { loopDivision: 12, lengthMultiplier: 1, fadeTime: 0.01, mix: 1 };
 
-            return {
-                type,
-                nodes: reverbNodes,
-                updateParams: (params: ReverbParams, context, bpm) => {
-                    const now = context.currentTime;
-                    const feedback = 0.5 + (safe(params.size, 0) * 0.4); 
-                    combs.forEach(c => setTarget(c.gain.gain, feedback, now, 0.02));
+            processor.onaudioprocess = (e) => {
+                const inL = e.inputBuffer.getChannelData(0), inR = e.inputBuffer.getChannelData(1);
+                const outL = e.outputBuffer.getChannelData(0), outR = e.outputBuffer.getChannelData(1);
+                if (!active) { outL.set(inL); outR.set(inR); return; }
 
-                    const dampFreq = 100 + Math.pow(safe(params.damping, 0), 2) * 8000;
-                    combs.forEach(c => setTarget(c.filter.frequency, dampFreq, now, 0.02));
+                const should = safe(curP.mix) > 0.1;
+                if (should && (!isLoop || curP.loopDivision !== lastDiv || curP.lengthMultiplier !== lastMult)) {
+                    isLoop = true; pIdx = 0; lastDiv = curP.loopDivision; lastMult = curP.lengthMultiplier;
+                    const div = EXTENDED_DIVISIONS[Math.floor(safe(curP.loopDivision) * (EXTENDED_DIVISIONS.length-1))] || EXTENDED_DIVISIONS[0];
+                    loopLen = Math.max(256, Math.floor(((ctx.sampleRate * 60)/bpm) * div.value * (1 + Math.floor(safe(curP.lengthMultiplier) * 7))));
+                    let rp = (wIdx - loopLen + rSize) % rSize;
+                    for (let i = 0; i < loopLen; i++) { bL[i] = rL[rp]; bR[i] = rR[rp]; rp = (rp + 1) % rSize; }
+                } else if (!should) isLoop = false;
 
-                    const delayMod = 0.01 + (safe(params.mod, 0) * 0.005);
-                    setTarget(preDelay.delayTime, delayMod, now, 0.1); 
+                for (let i = 0; i < processor.bufferSize; i++) {
+                    rL[wIdx] = inL[i]; rR[wIdx] = inR[i]; wIdx = (wIdx + 1) % rSize;
+                    if (isLoop && loopLen > 0) {
+                        let sL = bL[pIdx], sR = bR[pIdx];
+                        const f = 250;
+                        if (pIdx < f) { const sc = pIdx/f; sL *= sc; sR *= sc; }
+                        else if (pIdx > loopLen - f) { const sc = (loopLen-pIdx)/f; sL *= sc; sR *= sc; }
+                        outL[i] = sL; outR[i] = sR;
+                        pIdx = (pIdx + 1) % loopLen;
+                    } else { outL[i] = inL[i]; outR[i] = inR[i]; }
                 }
             };
+            slotNodes.effectInput.connect(processor);
+            processor.connect(slotNodes.effectOutput);
+            nodes.push(processor);
+            inputNode = processor;
+            return { type, nodes, inputNode, updateParams: (p, _, b, isOn) => { curP = p; bpm = b; active = isOn; } };
         }
-
         return null;
     };
 
-    // --- Dynamic Instance Management & Parameter Updates ---
     useEffect(() => {
         if (!audioContext || slotNodesRef.current.length === 0) return;
-
         performanceFx.slots.forEach((slotData, index) => {
+            const slotNodes = slotNodesRef.current[index];
             let instance = activeEffectsRef.current[index];
-
             if (!instance || instance.type !== slotData.type) {
                 if (instance) {
-                    instance.nodes.forEach(n => {
-                        try { n.disconnect(); } catch(e){}
-                        if (n instanceof OscillatorNode) {
-                            try { n.stop(); } catch(e){}
-                        }
-                    });
+                    try { slotNodes.effectInput.disconnect(); } catch(e){}
+                    instance.nodes.forEach(n => { try { n.disconnect(); } catch(e){} });
                 }
                 instance = createEffectInstance(slotData.type, index, audioContext);
                 activeEffectsRef.current[index] = instance;
             }
-
-            if (instance) {
-                instance.updateParams(slotData.params, audioContext, bpm);
-            }
+            if (instance) instance.updateParams(slotData.params, audioContext, bpm, slotData.isOn);
         });
-
     }, [audioContext, performanceFx.slots, bpm]);
 
-
-    // Handle Dynamic Routing
     useEffect(() => {
         if (!audioContext || !chainInputRef.current || slotNodesRef.current.length === 0) return;
-
         const slots = slotNodesRef.current;
-        const { routing } = performanceFx;
-
         chainInputRef.current.disconnect();
-        slots.forEach(slot => {
-            slot.outputNode.disconnect();
+        slots.forEach(s => s.outputNode.disconnect());
+        let src: AudioNode = chainInputRef.current;
+        performanceFx.routing.forEach(idx => {
+            const s = slots[idx];
+            if (s) { src.connect(s.inputNode); src = s.outputNode; }
         });
-
-        let currentSource: AudioNode = chainInputRef.current;
-
-        routing.forEach(slotIndex => {
-            const slot = slots[slotIndex];
-            if (slot) {
-                currentSource.connect(slot.inputNode);
-                currentSource = slot.outputNode;
-            }
-        });
-
-        currentSource.connect(chainOutputRef.current!);
-
+        src.connect(chainOutputRef.current!);
     }, [audioContext, performanceFx.routing]);
 
-    // Handle Bypass Logic & MIX Implementation
     useEffect(() => {
         if (!audioContext || slotNodesRef.current.length === 0) return;
-        
-        const now = audioContext.currentTime;
-        const RAMP = 0.02;
-
+        const now = audioContext.currentTime, RAMP = 0.02;
         performanceFx.slots.forEach((slotData, i) => {
             const nodes = slotNodesRef.current[i];
             if (!nodes) return;
-            
             if (slotData.isOn) {
-                // Get Mix value (default to 1 if undefined)
                 const mix = safe(slotData.params.mix, 1);
-                
-                // Crossfade Logic:
-                // Dry = 1 - mix
-                // Wet (Output of Effect) = mix
-                // Input to Effect = 1 (Always feed effect for tails, etc.)
-                
                 setTarget(nodes.dryGain.gain, 1 - mix, now, RAMP);
                 setTarget(nodes.effectOutput.gain, mix, now, RAMP);
                 setTarget(nodes.wetGain.gain, 1, now, RAMP); 
             } else {
-                // BYPASSED
                 setTarget(nodes.dryGain.gain, 1, now, RAMP);
-                setTarget(nodes.wetGain.gain, 0, now, RAMP); // Cut input to effect
-
-                if (slotData.bypassMode === 'hard') {
-                    setTarget(nodes.effectOutput.gain, 0, now, RAMP); // Cut output (no tails)
-                } else {
-                    // Soft bypass: Allow effect output to ring out (tails)
-                    // But we want the *current* state of the effect output to fade naturally or stay connected?
-                    // Typically soft bypass means stop feeding input, but let output play.
-                    // We set wetGain to 0 (stop feeding input).
-                    // We keep effectOutputGain at 1? Or 0?
-                    // If we set it to 1, we might hear the tail at full volume.
-                    // Let's assume soft bypass keeps the output open.
-                    setTarget(nodes.effectOutput.gain, 1, now, RAMP);
-                }
+                setTarget(nodes.wetGain.gain, 0, now, RAMP);
+                setTarget(nodes.effectOutput.gain, 0, now, RAMP); 
             }
         });
-
     }, [audioContext, performanceFx.slots]);
 
-    return {
-        inputNode: chainInputRef.current,
+    return { 
+        inputNode: chainInputRef.current, 
         outputNode: chainOutputRef.current,
-        slotNodes: slotNodesRef.current
+        isReady: !!chainInputRef.current 
     };
 };

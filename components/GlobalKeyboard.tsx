@@ -1,5 +1,5 @@
 
-import React, { useContext, useMemo } from 'react';
+import React, { useContext, useMemo, useState, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { ActionType } from '../types';
 import SCALES from '../scales';
@@ -29,6 +29,9 @@ const PHYSICAL_KEYBOARD_LAYOUT = [
 const GlobalKeyboard: React.FC<GlobalKeyboardProps> = ({ onNotePlay }) => {
     const { state, dispatch } = useContext(AppContext);
     const { activeKey, activeScale, keyboardOctave, activeSampleBank } = state;
+    const [isPointerDown, setIsPointerDown] = useState(false);
+    const keyboardContainerRef = useRef<HTMLDivElement>(null);
+
 
     const keyboardNotesInCents = useMemo(() => {
         const scale = SCALES.find(s => s.name === activeScale);
@@ -63,10 +66,22 @@ const GlobalKeyboard: React.FC<GlobalKeyboardProps> = ({ onNotePlay }) => {
         const noteName = NOTE_NAMES[(midiNote % 12 + 12) % 12];
         return { name: noteName, offset };
     };
+    
+    const handlePointerDown = () => setIsPointerDown(true);
+    const handlePointerUp = () => setIsPointerDown(false);
+
+    const handleKeyEnter = (cents: number) => {
+        if (isPointerDown) {
+            onNotePlay(cents);
+        }
+    };
 
 
     return (
-        <div className="bg-emerald-100/80 p-1 flex flex-col items-center space-y-1">
+        <div 
+            className="bg-emerald-100/80 p-1 flex flex-col items-center space-y-1"
+            onMouseLeave={handlePointerUp} // If mouse leaves the whole keyboard area, stop playing
+        >
             <div className="flex w-full justify-between items-center px-1">
                 <div className="flex items-center space-x-2">
                     <button 
@@ -117,7 +132,14 @@ const GlobalKeyboard: React.FC<GlobalKeyboardProps> = ({ onNotePlay }) => {
                     </select>
                 </div>
             </div>
-            <div className="relative w-full h-24">
+            <div 
+                ref={keyboardContainerRef}
+                className="relative w-full h-24 touch-none"
+                onMouseDown={handlePointerDown}
+                onMouseUp={handlePointerUp}
+                onTouchStart={handlePointerDown}
+                onTouchEnd={handlePointerUp}
+            >
                 <div className="absolute inset-0 flex">
                 {PHYSICAL_KEYBOARD_LAYOUT.filter(k => k.type === 'white').map((keyInfo) => {
                     const cents = keyboardNotesInCents[keyInfo.chromaticIndex];
@@ -126,6 +148,7 @@ const GlobalKeyboard: React.FC<GlobalKeyboardProps> = ({ onNotePlay }) => {
                         <button
                             key={keyInfo.chromaticIndex}
                             onMouseDown={() => onNotePlay(cents)}
+                            onMouseEnter={() => handleKeyEnter(cents)}
                             className="w-[12.5%] h-full border-2 rounded-md flex flex-col items-center justify-end p-1 transition-colors bg-white border-slate-200 active:bg-pink-200"
                         >
                             <span className="font-bold text-base">{name}</span>
@@ -141,7 +164,8 @@ const GlobalKeyboard: React.FC<GlobalKeyboardProps> = ({ onNotePlay }) => {
                     return (
                          <button
                             key={keyInfo.chromaticIndex}
-                            onMouseDown={() => onNotePlay(cents)}
+                            onMouseDown={(e) => { e.stopPropagation(); onNotePlay(cents); }}
+                            onMouseEnter={(e) => { e.stopPropagation(); handleKeyEnter(cents); }}
                             className={`absolute w-[8.5%] h-14 border-2 rounded-md flex flex-col items-center justify-end p-1 transition-colors bg-slate-800 text-white border-slate-600 active:bg-pink-500 ${keyInfo.position}`}
                         >
                             <span className="font-bold text-base">{name}</span>

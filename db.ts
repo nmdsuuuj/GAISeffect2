@@ -28,13 +28,13 @@ export interface Project {
   id?: number;
   name: string;
   createdAt: Date;
-  state: Omit<AppState, 'audioContext' | 'isInitialized' | 'isPlaying' | 'isRecording' | 'currentSteps' | 'samples' | 'grooves' | 'isLoading'>;
+  state: Omit<AppState, 'audioContext' | 'isInitialized' | 'isPlaying' | 'isRecording' | 'currentSteps' | 'samples' | 'isLoading'>;
   samples: StorableSample[];
 }
 
 export interface Session {
   id?: 0; // Always use ID 0 for the single session
-  state: Omit<AppState, 'audioContext' | 'isInitialized' | 'isPlaying' | 'isRecording' | 'currentSteps' | 'samples' | 'grooves' | 'isLoading'>;
+  state: Omit<AppState, 'audioContext' | 'isInitialized' | 'isPlaying' | 'isRecording' | 'currentSteps' | 'samples' | 'isLoading'>;
   samples: StorableSample[];
 }
 
