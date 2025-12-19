@@ -6,6 +6,10 @@
     <title>Groove Sampler</title>
     <link rel="manifest" href="/manifest.json" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // The safelist didn't work reliably for the Play CDN.
+      // The required classes are now defined in the <style> tag below.
+    </script>
     <style>
       body {
         -webkit-touch-callout: none;
@@ -16,6 +20,14 @@
         user-select: none;
         -webkit-tap-highlight-color: transparent;
       }
+      /* Manually define dynamic classes for sequencer grid to ensure they are available */
+      .grid-cols-16 {
+        grid-template-columns: repeat(16, minmax(0, 1fr));
+      }
+      .h-3 {
+        height: 0.75rem;
+      }
+
       /* Base styles for ALL range inputs - NEW SLIMMER DEFAULT */
       input[type="range"] {
         cursor: pointer;

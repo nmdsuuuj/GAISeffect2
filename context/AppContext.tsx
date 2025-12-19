@@ -1,16 +1,17 @@
 
 import React, { createContext, useReducer } from 'react';
 import { AppState, Action, ActionType, Pattern, Step, Sample, Synth, ModMatrix, PerformanceChain, MasterCompressorParams, CompressorSnapshot, LockableParam } from '../types';
-import { TOTAL_BANKS, PADS_PER_BANK, STEPS_PER_PATTERN, TOTAL_PATTERNS, TOTAL_SAMPLES, DEFAULT_PERFORMANCE_FX, OSC_WAVEFORMS, MOD_SOURCES, MOD_DESTINATIONS, PATTERNS_PER_BANK } from '../constants';
+import { TOTAL_BANKS, PADS_PER_BANK, MAX_STEPS_PER_PATTERN, TOTAL_PATTERNS, TOTAL_SAMPLES, DEFAULT_PERFORMANCE_FX, OSC_WAVEFORMS, MOD_SOURCES, MOD_DESTINATIONS, PATTERNS_PER_BANK } from '../constants';
 import SCALES from '../scales';
 
 // --- Initial State Helpers ---
 
-const createEmptySteps = (): Step[] => Array.from({ length: STEPS_PER_PATTERN }, () => ({ active: false, velocity: 1 }));
+const createEmptySteps = (): Step[] => Array.from({ length: MAX_STEPS_PER_PATTERN }, () => ({ active: false, velocity: 1 }));
 
 const createEmptyPattern = (id: number): Pattern => ({
     id,
     steps: Array.from({ length: TOTAL_SAMPLES }, () => createEmptySteps()),
+    totalSteps: 32,
     stepResolutionA: 16, stepResolutionB: 16,
     stepLengthA: 16, stepLengthB: 16,
     loopCountA: 1, loopCountB: 1,
@@ -200,7 +201,16 @@ const reducer = (state: AppState, action: Action): AppState => {
             const { patternId, params } = action.payload;
             return {
                 ...state,
-                patterns: updatePatternImmutably(state.patterns, patternId, p => ({ ...p, ...params }))
+                patterns: updatePatternImmutably(state.patterns, patternId, p => {
+                    const newPattern = { ...p, ...params };
+                    // If totalSteps is changing, set the part lengths to the new max
+                    if (params.totalSteps !== undefined && params.totalSteps !== p.totalSteps) {
+                        const newPartLength = params.totalSteps / 2;
+                        newPattern.stepLengthA = newPartLength;
+                        newPattern.stepLengthB = newPartLength;
+                    }
+                    return newPattern;
+                })
             };
         }
         

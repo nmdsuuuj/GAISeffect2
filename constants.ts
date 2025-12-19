@@ -9,8 +9,7 @@ export const GROOVES_PER_BANK = 16; // Increased from 8
 export const TOTAL_SAMPLES = TOTAL_BANKS * PADS_PER_BANK; // 32
 export const TOTAL_PATTERNS = TOTAL_BANKS * PATTERNS_PER_BANK; // 128
 export const TOTAL_GROOVES = TOTAL_BANKS * GROOVES_PER_BANK; // Now 64
-export const STEPS_PER_PATTERN = 32;
-export const STEPS_PER_PART = 16;
+export const MAX_STEPS_PER_PATTERN = 128;
 
 export const LOOP_PRESETS = [
     { label: '1:1', a: 1, b: 1 },

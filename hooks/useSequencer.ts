@@ -2,7 +2,7 @@
 import { useContext, useEffect, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { ActionType, PlaybackParams, Sample, Step, Synth } from '../types';
-import { STEPS_PER_PART, GROOVE_PATTERNS, TOTAL_BANKS, PADS_PER_BANK } from '../constants';
+import { GROOVE_PATTERNS, TOTAL_BANKS, PADS_PER_BANK } from '../constants';
 import SCALES from '../scales';
 
 interface TrackState {
@@ -132,8 +132,9 @@ export const useSequencer = (
                 const pattern = patterns[patternId];
                 if (!pattern) continue;
 
+                const partLength = pattern.totalSteps / 2;
                 const isPartA = trackState.currentPart === 'A';
-                const displayStep = isPartA ? trackState.partStep : trackState.partStep + STEPS_PER_PART;
+                const displayStep = isPartA ? trackState.partStep : trackState.partStep + partLength;
 
                 const firstSampleInBank = nextTrackIndex * PADS_PER_BANK;
                 const lastSampleInBank = firstSampleInBank + PADS_PER_BANK;
@@ -146,7 +147,7 @@ export const useSequencer = (
                 const grooveDepth = grooveDepths[nextTrackIndex];
 
                 const groovePattern = GROOVE_PATTERNS[grooveId];
-                const grooveOffsetIndex = displayStep % STEPS_PER_PART;
+                const grooveOffsetIndex = displayStep % 16;
                 const offsetFraction = groovePattern.offsets[grooveOffsetIndex] || 0;
                 const timeShift = stepDurationForGroove * offsetFraction * grooveDepth;
                 const scheduledTime = trackState.nextStepTime + timeShift;

@@ -119,6 +119,7 @@ export type LockableParam = 'pitch' | 'volume' | 'decay' | 'start' | 'lpFreq' | 
 export interface Pattern {
     id: number;
     steps: Step[][]; // [sampleId][stepIndex]
+    totalSteps: number;
     stepResolutionA: number;
     stepResolutionB: number;
     stepLengthA: number;

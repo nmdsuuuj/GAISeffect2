@@ -3,7 +3,7 @@ import React, { useContext, useState, useMemo, useEffect, useRef } from 'react';
 import { AppContext } from '../../context/AppContext';
 import { ActionType, Pattern, LockableParam, Sample, PlaybackParams, SubTab } from '../../types';
 import Pad from '../Pad';
-import { PADS_PER_BANK, STEPS_PER_PART, LOOP_PRESETS, PATTERNS_PER_BANK, STEPS_PER_PATTERN } from '../../constants';
+import { PADS_PER_BANK, LOOP_PRESETS, PATTERNS_PER_BANK } from '../../constants';
 import Fader from '../Fader';
 import SCALES from '../../scales';
 import TEMPLATES, { Template } from '../../templates';
@@ -69,32 +69,53 @@ const PartSettings: React.FC<{
         }
     };
 
+    const handleStepCountChange = (stepsPerPart: number) => {
+        updatePatternParams({ totalSteps: stepsPerPart * 2 });
+    };
+
     const currentLoopPreset = LOOP_PRESETS.find(p => p.a === activePattern.loopCountA && p.b === activePattern.loopCountB);
+    const stepsPerPart = activePattern.totalSteps / 2;
 
     return (
         <div className="flex-shrink-0 bg-white shadow-md p-1 rounded-lg space-y-1">
             {/* Playback Scale Controls */}
-            <div className="bg-emerald-50/80 p-1 rounded-md flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 px-2">Playback Scale</span>
-                <div className="flex items-center space-x-1">
-                     <select 
-                        value={activePattern.playbackKey} 
-                        onChange={(e) => updatePlaybackScale({ key: parseInt(e.target.value)})}
-                        className="bg-emerald-200 text-emerald-800 rounded p-1 text-xs focus:outline-none focus:ring-2 focus:ring-pink-400"
-                    >
-                        {NOTE_NAMES.map((name, index) => (
-                            <option key={name} value={index}>{name}</option>
+            <div className="bg-emerald-50/80 p-1 rounded-md grid grid-cols-2 gap-x-2">
+                <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500">Scale</span>
+                    <div className="flex items-center space-x-1">
+                        <select 
+                            value={activePattern.playbackKey} 
+                            onChange={(e) => updatePlaybackScale({ key: parseInt(e.target.value)})}
+                            className="bg-emerald-200 text-emerald-800 rounded p-1 text-xs focus:outline-none focus:ring-2 focus:ring-pink-400"
+                        >
+                            {NOTE_NAMES.map((name, index) => (
+                                <option key={name} value={index}>{name}</option>
+                            ))}
+                        </select>
+                        <select 
+                            value={activePattern.playbackScale} 
+                            onChange={(e) => updatePlaybackScale({ scale: e.target.value})}
+                            className="bg-emerald-200 text-emerald-800 rounded p-1 text-xs focus:outline-none focus:ring-2 focus:ring-pink-400 max-w-[80px]"
+                        >
+                            {SCALES.map(scale => (
+                                <option key={scale.name} value={scale.name}>{scale.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+                 <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500">Steps</span>
+                    <div className="flex items-center space-x-1 p-0.5 bg-emerald-200 rounded-md">
+                        {[16, 32, 64].map(steps => (
+                            <button
+                                key={steps}
+                                onClick={() => handleStepCountChange(steps)}
+                                className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${stepsPerPart === steps ? 'bg-white text-slate-800 shadow-sm' : 'bg-transparent text-slate-600'}`}
+                            >
+                                {steps}
+                            </button>
                         ))}
-                    </select>
-                     <select 
-                        value={activePattern.playbackScale} 
-                        onChange={(e) => updatePlaybackScale({ scale: e.target.value})}
-                        className="bg-emerald-200 text-emerald-800 rounded p-1 text-xs focus:outline-none focus:ring-2 focus:ring-pink-400 max-w-[120px]"
-                    >
-                        {SCALES.map(scale => (
-                            <option key={scale.name} value={scale.name}>{scale.name}</option>
-                        ))}
-                    </select>
+                    </div>
                 </div>
             </div>
 
@@ -112,7 +133,7 @@ const PartSettings: React.FC<{
                         ))}
                     </div>
                     <div className="relative">
-                        <Fader label="Len" value={activePattern.stepLengthA} onChange={val => updatePatternParams({ stepLengthA: val })} min={1} max={16} step={1} defaultValue={16} displayPrecision={0} />
+                        <Fader label="Len" value={activePattern.stepLengthA} onChange={val => updatePatternParams({ stepLengthA: val })} min={1} max={stepsPerPart} step={1} defaultValue={16} displayPrecision={0} />
                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <span className="text-white text-3xl font-bold opacity-60 drop-shadow-md">A</span>
                         </div>
@@ -131,7 +152,7 @@ const PartSettings: React.FC<{
                         ))}
                     </div>
                      <div className="relative">
-                        <Fader label="Len" value={activePattern.stepLengthB} onChange={val => updatePatternParams({ stepLengthB: val })} min={1} max={16} step={1} defaultValue={16} displayPrecision={0} />
+                        <Fader label="Len" value={activePattern.stepLengthB} onChange={val => updatePatternParams({ stepLengthB: val })} min={1} max={stepsPerPart} step={1} defaultValue={16} displayPrecision={0} />
                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <span className="text-white text-3xl font-bold opacity-60 drop-shadow-md">B</span>
                         </div>
@@ -436,6 +457,19 @@ const SeqView: React.FC<SeqViewProps> = ({ playSample, playSynthNote, setSubTabs
 
     const sampleId = activeSampleId;
     const utilityButtonClass = "bg-emerald-200 text-emerald-800 rounded p-1.5 text-[10px] font-bold focus:outline-none focus:ring-2 focus:ring-pink-400 w-full hover:bg-emerald-300 transition-colors leading-tight";
+    const stepsPerPart = activePattern.totalSteps / 2;
+
+    const totalSteps = activePattern.totalSteps;
+    let gridColsClass = 'grid-cols-8';
+    let stepHeightClass = 'h-7';
+
+    if (totalSteps === 64) {
+        gridColsClass = 'grid-cols-16';
+        stepHeightClass = 'h-7';
+    } else if (totalSteps === 128) {
+        gridColsClass = 'grid-cols-16';
+        stepHeightClass = 'h-3';
+    }
 
 
     return (
@@ -535,12 +569,12 @@ const SeqView: React.FC<SeqViewProps> = ({ playSample, playSynthNote, setSubTabs
 
             {/* Step Sequencer Grid / Param Editor */}
             <div className="bg-white shadow-md p-1 rounded-lg">
-                <div className="grid grid-cols-8 gap-1">
-                    {Array.from({ length: STEPS_PER_PATTERN }).map((_, stepIndex) => {
+                <div className={`grid ${gridColsClass} gap-1`}>
+                    {Array.from({ length: totalSteps }).map((_, stepIndex) => {
                         const stepInfo = activePattern.steps[sampleId]?.[stepIndex];
                         const isStepOn = stepInfo?.active;
                         const isCurrentStep = currentStep === stepIndex;
-                        const isPartB = stepIndex >= STEPS_PER_PART;
+                        const isPartB = stepIndex >= stepsPerPart;
                         const isSelected = selectedSeqStep === stepIndex;
                         
                         if (seqMode === 'PART' || seqMode === 'REC') {
@@ -557,7 +591,7 @@ const SeqView: React.FC<SeqViewProps> = ({ playSample, playSynthNote, setSubTabs
                             if (isCurrentStep) {
                                 colorClasses = isStepOn ? 'bg-lime-300 brightness-125' : 'bg-lime-400/50';
                             }
-                            const baseClasses = 'w-full h-7 rounded-sm transition-colors';
+                            const baseClasses = `w-full ${stepHeightClass} rounded-sm transition-colors`;
                             const selectedClass = isSelected ? 'ring-2 ring-sky-400 ring-offset-1' : '';
 
                             return (
@@ -574,12 +608,13 @@ const SeqView: React.FC<SeqViewProps> = ({ playSample, playSynthNote, setSubTabs
                             
                             const noteOnClass = isStepOn ? `border-2 ${isSynthTrack ? 'border-cyan-500' : 'border-pink-400'}` : 'border-2 border-transparent';
                             const selectedClass = isSelected ? 'ring-2 ring-sky-400 ring-offset-1' : '';
+                            const baseClasses = `w-full ${stepHeightClass} rounded-sm transition-colors`;
 
                             return (
                                 <button
                                     key={stepIndex}
                                     onClick={() => handleStepClick(sampleId, stepIndex)}
-                                    className={`w-full h-7 rounded-sm transition-colors ${bgClass} ${noteOnClass} ${selectedClass}`}
+                                    className={`${baseClasses} ${bgClass} ${noteOnClass} ${selectedClass}`}
                                 />
                             );
                         }
