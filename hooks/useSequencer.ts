@@ -53,7 +53,7 @@ const remapDetuneToScale = (originalDetune: number, targetScaleName: string, tar
 
 export const useSequencer = (
     playSample: (sampleId: number, time: number, params: Partial<PlaybackParams>) => void,
-    playSynthNote: (detune: number, time: number, params?: Partial<Pick<Synth, 'modWheel'>>) => void,
+    playSynthNote: (detune: number, time: number, params?: { modWheel?: number; velocity?: number }) => void,
     scheduleLfoRetrigger: (lfoIndex: number, time: number) => void
 ) => {
     const { state, dispatch } = useContext(AppContext);
@@ -169,10 +169,10 @@ export const useSequencer = (
                     }
                     
                     // Determine effective Mod Wheel Value
-                    // Check if there is a P-Lock on this specific step.
-                    // If no P-Lock, default to 1. This means the sequencer sends a "full" signal,
-                    // which is then scaled by the Panel Depth Knob.
-                    let effectiveModWheel = 1; 
+                    // FIX: Default to 0. This implies no "extra" modulation from the sequencer unless a P-Lock exists.
+                    // This allows the "Offset" knob to act as the primary manual control, and "Depth" to act as the sequencer sensitivity.
+                    // If Offset is 0 and Depth is >0, output is 0. This enables "Offset = 0 -> Mute".
+                    let effectiveModWheel = 0; 
                     let pLockFound = false;
 
                     for (let sampleId = firstSampleInBank; sampleId < lastSampleInBank; sampleId++) {
@@ -184,9 +184,9 @@ export const useSequencer = (
                         }
                     }
 
-                    // If P.L Mute is active, force Value to 1 (Panel Knob control only)
+                    // If P.L Mute is active, force Value to 0 (Panel Knob/Offset control only)
                     if (isModWheelLockMuted) {
-                        effectiveModWheel = 1;
+                        effectiveModWheel = 0;
                     }
 
                     const activeNotes: { sampleId: number; stepInfo: Step }[] = [];
@@ -214,8 +214,9 @@ export const useSequencer = (
                             finalDetune = remapDetuneToScale(finalDetune, pattern.playbackScale, pattern.playbackKey);
                         }
                         
-                        const synthParams: Partial<Pick<Synth, 'modWheel'>> = {
+                        const synthParams = {
                             modWheel: effectiveModWheel,
+                            velocity: noteToPlay.stepInfo.velocity // Pass velocity
                         };
 
                         playSynthNote(finalDetune, scheduledTime, synthParams);

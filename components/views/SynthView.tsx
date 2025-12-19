@@ -127,9 +127,8 @@ const SynthView: React.FC<SynthViewProps> = ({ playSynthNote, lfoAnalysers, setS
     };
     
     const handleClearMatrix = () => {
-        if (window.confirm('Are you sure you want to clear the entire modulation matrix?')) {
-            dispatch({ type: ActionType.CLEAR_SYNTH_MOD_MATRIX });
-        }
+        // Removed window.confirm for immediate feedback as requested
+        dispatch({ type: ActionType.CLEAR_SYNTH_MOD_MATRIX });
     };
     
     const handleMuteModWheelLock = () => {
@@ -335,7 +334,8 @@ const SynthView: React.FC<SynthViewProps> = ({ playSynthNote, lfoAnalysers, setS
                             />
                             <Fader label="Cutoff" value={filterLogToLinear(synth.filter.cutoff)} onChange={v => handleParamChange('filter.cutoff', filterLinearToLog(v))} min={0} max={1} step={0.001} defaultValue={1} displayValue={synth.filter.cutoff} displayPrecision={0} />
                             <Fader label="Res" value={synth.filter.resonance} onChange={v => handleParamChange('filter.resonance', v)} min={0} max={30} step={0.1} defaultValue={1} />
-                            <Fader label="Env Amt" value={synth.filter.envAmount} onChange={v => handleParamChange('filter.envAmount', v)} min={-7000} max={7000} step={10} defaultValue={0} displayPrecision={0}/>
+                            {/* Boosted Env Amt Range to +/- 12000 cents (10 octaves) */}
+                            <Fader label="Env Amt" value={synth.filter.envAmount} onChange={v => handleParamChange('filter.envAmount', v)} min={-12000} max={12000} step={10} defaultValue={0} displayPrecision={0}/>
                         </>)}
                          {renderControlSection('MIX', <>
                             <Fader label="Osc Mix" value={synth.oscMix} onChange={v => handleParamChange('oscMix', v)} min={0} max={1} step={0.01} defaultValue={0.5} />

@@ -11,7 +11,7 @@ export const useAutomationEngine = (state: AppState, dispatch: React.Dispatch<Ac
     useEffect(() => { stateRef.current = state; }, [state]);
     
     const startTimeRef = useRef<number>(0);
-    const requestRef = useRef<number>();
+    const requestRef = useRef<number | null>(null);
 
     // Reset start time when play starts
     useEffect(() => {

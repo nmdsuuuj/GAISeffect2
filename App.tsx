@@ -1,7 +1,7 @@
 
 import React, { useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { AppContext } from './context/AppContext';
-import { Action, ActionType, PlaybackParams, SubTab } from './types';
+import { Action, ActionType, PlaybackParams, SubTab, SynthPreset } from './types';
 
 import Transport from './components/Transport';
 import TabButton from './components/TabButton';
@@ -15,9 +15,10 @@ import GlobalKeyboard from './components/GlobalKeyboard';
 
 import { useAudioEngine } from './hooks/useAudioEngine';
 import { useSequencer } from './hooks/useSequencer';
-import { useAutomationEngine } from './hooks/useAutomationEngine'; // NEW
+import { useAutomationEngine } from './hooks/useAutomationEngine'; 
 import { PADS_PER_BANK } from './constants';
 import SCALES from './scales';
+import { db } from './db';
 
 type View = 'OTO' | 'SEQ' | 'GROOVE' | 'MIXER' | 'PROJECT';
 
@@ -45,6 +46,15 @@ const App: React.FC = () => {
         audioContext.resume().then(() => {
           dispatch({ type: ActionType.INITIALIZE_AUDIO, payload: audioContext });
         });
+        
+        // Load Global Synth Presets
+        db.globalSynthPresets.toArray().then((presets: SynthPreset[]) => {
+             const fullList = Array(128).fill(null);
+             presets.forEach(p => {
+                 if(p && p.id >= 0 && p.id < 128) fullList[p.id] = p;
+             });
+             dispatch({ type: ActionType.IMPORT_SYNTH_PRESETS, payload: fullList });
+        }).catch(err => console.error("Failed to load synth presets", err));
       }
       window.removeEventListener('click', initAudio);
       window.removeEventListener('keydown', initAudio);
@@ -84,10 +94,10 @@ const App: React.FC = () => {
     startMasterRecording,
     stopMasterRecording,
     flushAllSources,
-    lfoAnalysers // Get analysers
+    lfoAnalysers 
   } = useAudioEngine();
   useSequencer(playSample, playSynthNote, scheduleLfoRetrigger);
-  const automationClock = useAutomationEngine(state, dispatch); // NEW: Automation Engine
+  const automationClock = useAutomationEngine(state, dispatch); 
 
   const handleNotePlay = useCallback((detune: number) => {
     const { 
@@ -121,7 +131,7 @@ const App: React.FC = () => {
         
         // Also play the note live for feedback
         if (activeSampleBank === 3) {
-            playSynthNote(finalRelativeDetune, 0);
+            playSynthNote(finalRelativeDetune, 0, { velocity: 1 });
         } else {
             playSample(activeSampleId, 0, { detune: finalRelativeDetune });
         }
@@ -130,7 +140,7 @@ const App: React.FC = () => {
 
     // 2. If not step input, proceed with live play / real-time recording
     if(activeSampleBank === 3) {
-      playSynthNote(finalRelativeDetune, 0);
+      playSynthNote(finalRelativeDetune, 0, { velocity: 1 });
     } else {
       playSample(activeSampleId, 0, { detune: finalRelativeDetune });
     }
@@ -206,7 +216,6 @@ const App: React.FC = () => {
           case 'k': {
               const newKey = (activeKey - 1 + 12) % 12;
               appDispatch({ type: ActionType.SET_KEY, payload: newKey });
-              // Also update active pattern playback key
               const activePatternId = appState.activePatternIds[activeSampleBank];
               if (activePatternId !== undefined) {
                   appDispatch({ type: ActionType.UPDATE_PATTERN_PLAYBACK_SCALE, payload: { patternId: activePatternId, key: newKey } });
@@ -216,7 +225,6 @@ const App: React.FC = () => {
           case 'l': {
               const newKey = (activeKey + 1) % 12;
               appDispatch({ type: ActionType.SET_KEY, payload: newKey });
-              // Also update active pattern playback key
               const activePatternId = appState.activePatternIds[activeSampleBank];
               if (activePatternId !== undefined) {
                   appDispatch({ type: ActionType.UPDATE_PATTERN_PLAYBACK_SCALE, payload: { patternId: activePatternId, key: newKey } });
@@ -231,7 +239,6 @@ const App: React.FC = () => {
             const prevIndex = (currentIndexDown - 1 + SCALES.length) % SCALES.length;
             const newScale = SCALES[prevIndex].name;
             appDispatch({ type: ActionType.SET_SCALE, payload: newScale });
-            // Also update active pattern playback scale
             const activePatternId = appState.activePatternIds[activeSampleBank];
             if (activePatternId !== undefined) {
                 appDispatch({ type: ActionType.UPDATE_PATTERN_PLAYBACK_SCALE, payload: { patternId: activePatternId, scale: newScale } });
@@ -243,7 +250,6 @@ const App: React.FC = () => {
             const nextIndex = (currentIndexUp + 1) % SCALES.length;
             const newScale = SCALES[nextIndex].name;
             appDispatch({ type: ActionType.SET_SCALE, payload: newScale });
-            // Also update active pattern playback scale
             const activePatternId = appState.activePatternIds[activeSampleBank];
             if (activePatternId !== undefined) {
                 appDispatch({ type: ActionType.UPDATE_PATTERN_PLAYBACK_SCALE, payload: { patternId: activePatternId, scale: newScale } });
@@ -264,7 +270,7 @@ const App: React.FC = () => {
           appDispatch({ type: ActionType.SET_ACTIVE_SAMPLE, payload: sampleIdToTrigger });
 
           if (activeSampleBank === 3) {
-            playSynthNote(0, 0); 
+            playSynthNote(0, 0, { velocity: 1 }); 
           } else {
             if (appState.samples[sampleIdToTrigger]?.buffer) {
                  playSample(sampleIdToTrigger, 0);
@@ -306,7 +312,7 @@ const App: React.FC = () => {
         }
 
         if (noteInCents !== undefined) {
-            handleNotePlay(noteInCents); // Base detune before key/octave
+            handleNotePlay(noteInCents); 
         }
       }
   }, [dispatch, startRecording, stopRecording, handleNotePlay, playSample, playSynthNote]);
@@ -336,10 +342,9 @@ const App: React.FC = () => {
 
     switch (activeView) {
       case 'OTO':
-        if (state.activeSampleBank === 3) { // SYNTH bank
+        if (state.activeSampleBank === 3) { 
           return <SynthView setSubTabs={setSubTabs} playSynthNote={playSynthNote} lfoAnalysers={lfoAnalysers} />;
         }
-        // Sample banks A, B, C
         return <SampleView 
             setSubTabs={setSubTabs}
             activeSampleId={state.activeSampleId}
@@ -365,7 +370,6 @@ const App: React.FC = () => {
       case 'PROJECT':
         return <ProjectView flushAllSources={flushAllSources} />;
       default:
-        // Fallback to OTO logic
         if (state.activeSampleBank === 3) {
           return <SynthView setSubTabs={setSubTabs} playSynthNote={playSynthNote} lfoAnalysers={lfoAnalysers} />;
         }
@@ -402,7 +406,6 @@ const App: React.FC = () => {
       </main>
 
       <footer className="flex-shrink-0 space-y-1 pt-1">
-        {/* Sub-tabs */}
         <div className="flex-shrink-0">
             {subTabs.length > 0 && (
               <div className="px-1">
@@ -425,7 +428,6 @@ const App: React.FC = () => {
             )}
         </div>
         
-        {/* Main tabs */}
         <div className="p-0.5 bg-emerald-100/50">
           <div className="grid grid-cols-5 gap-1">
             <TabButton label="OTO" isActive={activeView === 'OTO'} onClick={() => setActiveView('OTO')} />
