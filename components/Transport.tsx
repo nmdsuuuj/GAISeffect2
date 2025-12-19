@@ -31,7 +31,7 @@ const RATIOS_ROW2 = [
 
 const Transport: React.FC<TransportProps> = ({ startMasterRecording, stopMasterRecording }) => {
   const { state, dispatch } = useContext(AppContext);
-  const { isPlaying, bpm, isMasterRecArmed, isMasterRecording } = state;
+  const { isPlaying, bpm, isMasterRecArmed, isMasterRecording, currentProjectName, isDirty } = state;
   const cpuLoad = useCpuLoad();
 
   const [bpmMode, setBpmMode] = useState<BpmControlMode>('fader');
@@ -211,27 +211,26 @@ const Transport: React.FC<TransportProps> = ({ startMasterRecording, stopMasterR
         <span className="text-xs font-mono">{loadPercent}%</span>
       </button>
 
-      <div className="flex-grow flex items-center h-10 bg-emerald-100 rounded-lg p-2 shadow-inner">
-        <div className="flex-grow h-full">
-          {renderBpmControl()}
-        </div>
+      <div className="flex-grow flex flex-col h-10 bg-emerald-100 rounded-lg p-1 shadow-inner">
+         <div className="text-center truncate text-xs text-slate-500 font-semibold">
+            <span>{currentProjectName}{isDirty ? '*' : ''}</span>
+         </div>
+         <div className="flex-grow min-h-0">
+            {renderBpmControl()}
+         </div>
       </div>
-
-      <div className="flex flex-col items-center">
+      
+      <div className="flex flex-col items-center space-y-1">
+        <span className="font-bold text-lg leading-none">{bpm.toFixed(1)}</span>
         <button
-            onMouseDown={handleTapPress}
-            onMouseUp={handleTapRelease}
-            onTouchStart={handleTapPress}
-            onTouchEnd={handleTapRelease}
-            onClick={(e) => e.preventDefault()}
-            onContextMenu={(e) => e.preventDefault()}
-            className={`w-20 h-10 rounded-md transition-colors bg-emerald-200 text-slate-700 flex-shrink-0 hover:bg-emerald-300 flex items-center justify-center text-2xl font-bold tracking-tight border-2 ${getTapButtonBorderStyle()}`}
+          onMouseDown={handleTapPress}
+          onMouseUp={handleTapRelease}
+          onTouchStart={handleTapPress}
+          onTouchEnd={handleTapRelease}
+          className={`w-16 px-2 py-1 font-bold text-xs rounded-md bg-emerald-200 text-emerald-800 border-2 ${getTapButtonBorderStyle()}`}
         >
-            {bpm.toFixed(1)}
+          TAP
         </button>
-        <div className="text-xs text-slate-500 h-4 pt-0.5">
-            {bpmMode === 'ratio' && `Base: ${baseBpmForRatio.toFixed(1)}`}
-        </div>
       </div>
     </div>
   );

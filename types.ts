@@ -75,6 +75,7 @@ export enum ActionType {
     TOGGLE_MOD_WHEEL_LOCK_MUTE = 'TOGGLE_MOD_WHEEL_LOCK_MUTE',
     IMPORT_SYNTH_PRESETS = 'IMPORT_SYNTH_PRESETS',
     LOAD_PROJECT_STATE = 'LOAD_PROJECT_STATE',
+    PROJECT_SAVED = 'PROJECT_SAVED',
     LOAD_BANK_PRESET = 'LOAD_BANK_PRESET',
     RESET_TO_USER_DEFAULT = 'RESET_TO_USER_DEFAULT',
     SET_SAMPLES = 'SET_SAMPLES',
@@ -385,6 +386,8 @@ export interface AppState {
     // System
     audioContext: AudioContext | null;
     projectLoadCount: number;
+    currentProjectName: string;
+    isDirty: boolean;
 }
 
 export interface PlaybackParams {

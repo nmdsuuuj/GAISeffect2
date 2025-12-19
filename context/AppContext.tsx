@@ -1,6 +1,6 @@
 
 import React, { createContext, useReducer } from 'react';
-import { AppState, Action, ActionType, Pattern, Step, Sample, Synth, ModMatrix, PerformanceChain, MasterCompressorParams, CompressorSnapshot, LockableParam } from '../types';
+import { AppState, Action, ActionType, Pattern, Step, Sample, Synth, ModMatrix, PerformanceChain, MasterCompressorParams, CompressorSnapshot, LockableParam, BankPresetData } from '../types';
 import { TOTAL_BANKS, PADS_PER_BANK, MAX_STEPS_PER_PATTERN, TOTAL_PATTERNS, TOTAL_SAMPLES, DEFAULT_PERFORMANCE_FX, OSC_WAVEFORMS, MOD_SOURCES, MOD_DESTINATIONS, PATTERNS_PER_BANK } from '../constants';
 import SCALES from '../scales';
 
@@ -96,6 +96,8 @@ const INITIAL_STATE: AppState = {
     performanceFx: DEFAULT_PERFORMANCE_FX,
     audioContext: null,
     projectLoadCount: 0,
+    currentProjectName: 'New Project',
+    isDirty: false,
 };
 
 // --- Immutable update helper for patterns ---
@@ -136,7 +138,8 @@ const reducer = (state: AppState, action: Action): AppState => {
                         }
                         return lane;
                     })
-                }))
+                })),
+                isDirty: true,
             };
         }
         
@@ -151,17 +154,17 @@ const reducer = (state: AppState, action: Action): AppState => {
                 id: state.activeSampleId, // Keep original ID
                 name: state.sampleClipboard.name,
             };
-            return { ...state, samples: newSamples, toastMessage: 'Sample pasted' };
+            return { ...state, samples: newSamples, toastMessage: 'Sample pasted', isDirty: true };
         }
 
         case ActionType.SET_KEYBOARD_OCTAVE:
             return { ...state, keyboardOctave: action.payload };
         
         case ActionType.SET_KEY:
-            return { ...state, activeKey: action.payload };
+            return { ...state, activeKey: action.payload, isDirty: true };
 
         case ActionType.SET_SCALE:
-            return { ...state, activeScale: action.payload };
+            return { ...state, activeScale: action.payload, isDirty: true };
 
         case ActionType.SET_ACTIVE_SAMPLE_BANK:
             return { ...state, activeSampleBank: action.payload, activeSampleId: action.payload * PADS_PER_BANK };
@@ -186,7 +189,8 @@ const reducer = (state: AppState, action: Action): AppState => {
                         }
                         return lane;
                     })
-                }))
+                })),
+                isDirty: true,
             };
         }
 
@@ -194,7 +198,7 @@ const reducer = (state: AppState, action: Action): AppState => {
             const { bankIndex, patternId } = action.payload;
             const newIds = [...state.activePatternIds];
             newIds[bankIndex] = patternId;
-            return { ...state, activePatternIds: newIds };
+            return { ...state, activePatternIds: newIds, isDirty: true };
         }
 
         case ActionType.UPDATE_PATTERN_PLAYBACK_SCALE: {
@@ -205,7 +209,8 @@ const reducer = (state: AppState, action: Action): AppState => {
                     ...p,
                     ...(key !== undefined && { playbackKey: key }),
                     ...(scale !== undefined && { playbackScale: scale }),
-                }))
+                })),
+                isDirty: true,
             };
         }
 
@@ -222,7 +227,8 @@ const reducer = (state: AppState, action: Action): AppState => {
                         newPattern.stepLengthB = newPartLength;
                     }
                     return newPattern;
-                })
+                }),
+                isDirty: true,
             };
         }
         
@@ -242,12 +248,13 @@ const reducer = (state: AppState, action: Action): AppState => {
                             }
                         }
                     }
-                }))
+                })),
+                isDirty: true,
             };
         }
         
         case ActionType.SET_BPM:
-            return { ...state, bpm: action.payload };
+            return { ...state, bpm: action.payload, isDirty: true };
 
         case ActionType.TOGGLE_PLAY:
             return { ...state, isPlaying: !state.isPlaying };
@@ -271,11 +278,11 @@ const reducer = (state: AppState, action: Action): AppState => {
             const { sampleId, param, value } = action.payload;
             const newSamples = [...state.samples];
             newSamples[sampleId] = { ...newSamples[sampleId], [param]: value };
-            return { ...state, samples: newSamples };
+            return { ...state, samples: newSamples, isDirty: true };
         }
         
         case ActionType.SET_RECORDING_THRESHOLD:
-            return { ...state, recordingThreshold: action.payload };
+            return { ...state, recordingThreshold: action.payload, isDirty: true };
 
         case ActionType.SET_GROOVE_DEPTH: {
             const { bankIndex, value } = action.payload;
@@ -287,7 +294,7 @@ const reducer = (state: AppState, action: Action): AppState => {
                 newGrooveDepths[bankIndex] = value;
                 return { ...p, grooveDepths: newGrooveDepths };
             });
-            return { ...state, grooveDepths: newDepths, patterns: newPatterns };
+            return { ...state, grooveDepths: newDepths, patterns: newPatterns, isDirty: true };
         }
 
         case ActionType.SET_ACTIVE_GROOVE: {
@@ -300,35 +307,35 @@ const reducer = (state: AppState, action: Action): AppState => {
                 newGrooveIds[bankIndex] = grooveId;
                 return { ...p, grooveIds: newGrooveIds };
              });
-             return { ...state, activeGrooveIds: newIds, patterns: newPatterns };
+             return { ...state, activeGrooveIds: newIds, patterns: newPatterns, isDirty: true };
         }
 
         case ActionType.SET_BANK_VOLUME: {
             const newVols = [...state.bankVolumes];
             newVols[action.payload.bankIndex] = action.payload.volume;
-            return { ...state, bankVolumes: newVols };
+            return { ...state, bankVolumes: newVols, isDirty: true };
         }
         
         case ActionType.SET_BANK_PAN: {
             const newPans = [...state.bankPans];
             newPans[action.payload.bankIndex] = action.payload.pan;
-            return { ...state, bankPans: newPans };
+            return { ...state, bankPans: newPans, isDirty: true };
         }
 
         case ActionType.TOGGLE_BANK_MUTE: {
             const newMutes = [...state.bankMutes];
             newMutes[action.payload.bankIndex] = !newMutes[action.payload.bankIndex];
-            return { ...state, bankMutes: newMutes };
+            return { ...state, bankMutes: newMutes, isDirty: true };
         }
         
         case ActionType.TOGGLE_BANK_SOLO: {
             const newSolos = [...state.bankSolos];
             newSolos[action.payload.bankIndex] = !newSolos[action.payload.bankIndex];
-            return { ...state, bankSolos: newSolos };
+            return { ...state, bankSolos: newSolos, isDirty: true };
         }
 
         case ActionType.SET_MASTER_VOLUME:
-            return { ...state, masterVolume: action.payload };
+            return { ...state, masterVolume: action.payload, isDirty: true };
         
         case ActionType.TOGGLE_MASTER_REC_ARMED:
             return { ...state, isMasterRecArmed: !state.isMasterRecArmed };
@@ -337,36 +344,33 @@ const reducer = (state: AppState, action: Action): AppState => {
             return { ...state, isMasterRecording: !state.isMasterRecording, isMasterRecArmed: false };
 
         case ActionType.TOGGLE_MASTER_COMPRESSOR:
-            return { ...state, masterCompressorOn: !state.masterCompressorOn };
+            return { ...state, masterCompressorOn: !state.masterCompressorOn, isDirty: true };
 
         case ActionType.UPDATE_MASTER_COMPRESSOR_PARAM:
-            return { ...state, masterCompressorParams: { ...state.masterCompressorParams, [action.payload.param]: action.payload.value } };
+            return { ...state, masterCompressorParams: { ...state.masterCompressorParams, [action.payload.param]: action.payload.value }, isDirty: true };
 
         case ActionType.SET_FX_TYPE: {
              const { slotIndex, type } = action.payload;
-             // Immutably update the slot array
              const newSlots = state.performanceFx.slots.map((slot, i) => 
                  i === slotIndex ? { ...slot, type, isOn: true } : slot
              );
-             return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+             return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots }, isDirty: true };
         }
         
         case ActionType.TOGGLE_FX_BYPASS: {
              const slotIndex = action.payload;
-             // Immutably update the slot array
              const newSlots = state.performanceFx.slots.map((slot, i) => 
                  i === slotIndex ? { ...slot, isOn: !slot.isOn } : slot
              );
-             return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+             return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots }, isDirty: true };
         }
 
         case ActionType.UPDATE_FX_PARAM: {
             const { slotIndex, param, value } = action.payload;
-            // Immutably update slot params
             const newSlots = state.performanceFx.slots.map((slot, i) => 
                 i === slotIndex ? { ...slot, params: { ...slot.params, [param]: value } } : slot
             );
-            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots }, isDirty: true };
         }
 
         case ActionType.UPDATE_FX_XY: {
@@ -379,7 +383,6 @@ const reducer = (state: AppState, action: Action): AppState => {
                     return { ...pad, x, y };
                 });
                 
-                // Map the new X/Y values to the effect parameters
                 const newParams = { 
                     ...slot.params, 
                     [newPads[padIndex].xParam]: x, 
@@ -388,7 +391,7 @@ const reducer = (state: AppState, action: Action): AppState => {
                 
                 return { ...slot, xyPads: newPads, params: newParams };
             });
-            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots }, isDirty: true };
         }
 
         case ActionType.RECORD_FX_AUTOMATION_POINT: {
@@ -418,7 +421,8 @@ const reducer = (state: AppState, action: Action): AppState => {
                             })
                         };
                     })
-                }
+                },
+                isDirty: true,
             };
         }
 
@@ -428,7 +432,7 @@ const reducer = (state: AppState, action: Action): AppState => {
                 ...slot,
                 xyPads: slot.xyPads.map((pad, pIdx) => pIdx === padIndex ? { ...pad, automation: { ...pad.automation, recordMode: mode } } : pad)
             } : slot);
-            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots }, isDirty: true };
         }
         
         case ActionType.SET_FX_AUTOMATION_RECORDING: {
@@ -452,7 +456,7 @@ const reducer = (state: AppState, action: Action): AppState => {
                 ...slot,
                 xyPads: slot.xyPads.map(pad => ({ ...pad, automation: { ...pad.automation, loopBar: bar } }))
             } : slot);
-            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+            return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots }, isDirty: true };
         }
 
         case ActionType.CLEAR_FX_AUTOMATION: {
@@ -469,11 +473,11 @@ const reducer = (state: AppState, action: Action): AppState => {
                  }
                  return slot;
              });
-             return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots } };
+             return { ...state, performanceFx: { ...state.performanceFx, slots: newSlots }, isDirty: true };
         }
 
         case ActionType.SET_FX_ROUTING:
-             return { ...state, performanceFx: { ...state.performanceFx, routing: action.payload } };
+             return { ...state, performanceFx: { ...state.performanceFx, routing: action.payload }, isDirty: true };
 
         case ActionType.UPDATE_SYNTH_PARAM: {
             const { path, value } = action.payload;
@@ -482,10 +486,10 @@ const reducer = (state: AppState, action: Action): AppState => {
                 const [key1, key2] = parts as [keyof Synth, string];
                 const nestedObj = state.synth[key1];
                 if (typeof nestedObj === 'object' && nestedObj !== null) {
-                    return { ...state, synth: { ...state.synth, [key1]: { ...(nestedObj as object), [key2]: value } } };
+                    return { ...state, synth: { ...state.synth, [key1]: { ...(nestedObj as object), [key2]: value } }, isDirty: true };
                 }
             } else if (parts.length === 1) {
-                return { ...state, synth: { ...state.synth, [parts[0]]: value } };
+                return { ...state, synth: { ...state.synth, [parts[0]]: value }, isDirty: true };
             }
             return state;
         }
@@ -496,17 +500,17 @@ const reducer = (state: AppState, action: Action): AppState => {
                 ...state.synthModMatrix,
                 [source]: { ...state.synthModMatrix[source], [dest]: value }
             };
-            return { ...state, synthModMatrix: newMatrix };
+            return { ...state, synthModMatrix: newMatrix, isDirty: true };
         }
         
         case ActionType.TOGGLE_SYNTH_MOD_MATRIX_MUTE:
-            return { ...state, isModMatrixMuted: !state.isModMatrixMuted };
+            return { ...state, isModMatrixMuted: !state.isModMatrixMuted, isDirty: true };
             
         case ActionType.CLEAR_SYNTH_MOD_MATRIX:
-            return { ...state, synthModMatrix: {} };
+            return { ...state, synthModMatrix: {}, isDirty: true };
             
         case ActionType.TOGGLE_MOD_WHEEL_LOCK_MUTE:
-            return { ...state, isModWheelLockMuted: !state.isModWheelLockMuted };
+            return { ...state, isModWheelLockMuted: !state.isModWheelLockMuted, isDirty: true };
             
         case ActionType.RANDOMIZE_SYNTH_PARAMS: {
             const newSynth: Synth = {
@@ -518,7 +522,7 @@ const reducer = (state: AppState, action: Action): AppState => {
                 filterEnv: { ...state.synth.filterEnv, attack: Math.random() * 2, decay: Math.random() * 2, sustain: Math.random() },
                 ampEnv: { ...state.synth.ampEnv, decay: Math.random() * 4 },
             };
-            return { ...state, synth: newSynth, toastMessage: "Synth randomized!" };
+            return { ...state, synth: newSynth, toastMessage: "Synth randomized!", isDirty: true };
         }
 
         case ActionType.RANDOMIZE_SYNTH_MOD_MATRIX: {
@@ -533,11 +537,11 @@ const reducer = (state: AppState, action: Action): AppState => {
                     });
                 }
             });
-            return { ...state, synthModMatrix: newMatrix, toastMessage: "Mod Matrix randomized!" };
+            return { ...state, synthModMatrix: newMatrix, toastMessage: "Mod Matrix randomized!", isDirty: true };
         }
         
         case ActionType.LOAD_SYNTH_PRESET:
-             return { ...state, synth: action.payload.synth, synthModMatrix: action.payload.modMatrix, toastMessage: `Loaded ${action.payload.name}` };
+             return { ...state, synth: action.payload.synth, synthModMatrix: action.payload.modMatrix, toastMessage: `Loaded ${action.payload.name}`, isDirty: true };
 
         case ActionType.SAVE_SYNTH_PRESET_AT_INDEX: {
             const { index, name, synth, matrix } = action.payload;
@@ -556,33 +560,24 @@ const reducer = (state: AppState, action: Action): AppState => {
              return { ...state, synthPresets: action.payload };
 
         case ActionType.RESET_TO_USER_DEFAULT:
-             return { ...INITIAL_STATE, audioContext: state.audioContext, isInitialized: true };
+             return { ...INITIAL_STATE, audioContext: state.audioContext, isInitialized: true, isDirty: true, currentProjectName: 'New Project' };
 
         case ActionType.LOAD_PROJECT_STATE: {
-             const loadedState = action.payload;
+             const { state: loadedState, name } = action.payload;
              
-             // --- MIGRATION & HYDRATION ---
-             // Defensively merge patterns to add new properties like totalSteps
              if (loadedState.patterns) {
                  loadedState.patterns = loadedState.patterns.map((p: Partial<Pattern>, i: number) => {
                      const defaultPattern = createEmptyPattern(p.id ?? i);
                      const migratedPattern = { ...defaultPattern, ...p };
-
-                     // If totalSteps is missing from an old project file, default it.
-                     if (!migratedPattern.totalSteps) {
-                         migratedPattern.totalSteps = 32;
-                     }
-
+                     if (!migratedPattern.totalSteps) migratedPattern.totalSteps = 32;
                      return migratedPattern;
                  });
              }
              
-             // Ensure synth object has all nested properties to prevent crashes
              if (loadedState.synth) {
                  const loadedSynth = loadedState.synth;
                  loadedState.synth = {
-                     ...DEFAULT_SYNTH,
-                     ...loadedSynth,
+                     ...DEFAULT_SYNTH, ...loadedSynth,
                      osc1: { ...DEFAULT_SYNTH.osc1, ...(loadedSynth.osc1 || {}) },
                      osc2: { ...DEFAULT_SYNTH.osc2, ...(loadedSynth.osc2 || {}) },
                      filter: { ...DEFAULT_SYNTH.filter, ...(loadedSynth.filter || {}) },
@@ -594,23 +589,59 @@ const reducer = (state: AppState, action: Action): AppState => {
              }
 
              return { 
-                 ...INITIAL_STATE, 
-                 ...loadedState, 
+                 ...INITIAL_STATE, ...loadedState, 
                  isInitialized: true, 
                  audioContext: state.audioContext, 
                  isPlaying: state.isPlaying, 
-                 projectLoadCount: state.projectLoadCount + 1 
+                 projectLoadCount: state.projectLoadCount + 1,
+                 currentProjectName: name,
+                 isDirty: false
             };
         }
+
+        case ActionType.PROJECT_SAVED:
+            return { ...state, currentProjectName: action.payload.name, isDirty: false };
              
         case ActionType.SET_SAMPLES:
-             return { ...state, samples: action.payload };
+             return { ...state, samples: action.payload, isDirty: true };
              
         case ActionType.SET_ARMED_STATE:
              return { ...state, isArmed: action.payload };
              
         case ActionType.SET_RECORDING_STATE:
              return { ...state, isRecording: action.payload };
+
+        case ActionType.LOAD_BANK_PRESET: {
+            const { bankIndex, presetData } = action.payload as { bankIndex: number, presetData: BankPresetData };
+            const newSamples = [...state.samples];
+            const startSampleIndex = bankIndex * PADS_PER_BANK;
+            for (let i = 0; i < PADS_PER_BANK; i++) {
+                if (presetData.samples[i]) {
+                    newSamples[startSampleIndex + i] = { ...presetData.samples[i], id: startSampleIndex + i };
+                }
+            }
+            const patternId = state.activePatternIds[bankIndex];
+            const newPatterns = updatePatternImmutably(state.patterns, patternId, p => {
+                const newSteps = [...p.steps];
+                const newLocks = {...p.paramLocks};
+                const newGrooveIds = [...p.grooveIds];
+                const newGrooveDepths = [...p.grooveDepths];
+                for (let i = 0; i < PADS_PER_BANK; i++) {
+                    const targetSampleId = startSampleIndex + i;
+                    newSteps[targetSampleId] = presetData.sequences[i];
+                    if (presetData.paramLocks[i]) newLocks[targetSampleId] = presetData.paramLocks[i];
+                    else delete newLocks[targetSampleId];
+                }
+                newGrooveIds[bankIndex] = presetData.grooveId;
+                newGrooveDepths[bankIndex] = presetData.grooveDepth;
+                return { ...p, steps: newSteps, paramLocks: newLocks, grooveIds: newGrooveIds, grooveDepths: newGrooveDepths };
+            });
+            const newLiveGrooveIds = [...state.activeGrooveIds];
+            const newLiveGrooveDepths = [...state.grooveDepths];
+            newLiveGrooveIds[bankIndex] = presetData.grooveId;
+            newLiveGrooveDepths[bankIndex] = presetData.grooveDepth;
+            return { ...state, samples: newSamples, patterns: newPatterns, activeGrooveIds: newLiveGrooveIds, grooveDepths: newLiveGrooveDepths, isDirty: true };
+        }
              
         case ActionType.LOAD_BANK_KIT: {
             const { bankIndex, samples } = action.payload;
@@ -619,26 +650,25 @@ const reducer = (state: AppState, action: Action): AppState => {
             for(let i=0; i<PADS_PER_BANK; i++) {
                 if (samples[i]) newSamples[start + i] = samples[i];
             }
-            return { ...state, samples: newSamples };
+            return { ...state, samples: newSamples, isDirty: true };
         }
 
         case ActionType.SAVE_COMPRESSOR_SNAPSHOT: {
             const { index, name, params } = action.payload;
             const newSnaps = [...state.compressorSnapshots];
             newSnaps[index] = { name, params };
-            return { ...state, compressorSnapshots: newSnaps };
+            return { ...state, compressorSnapshots: newSnaps, isDirty: true };
         }
         
         case ActionType.LOAD_COMPRESSOR_SNAPSHOT:
-            return { ...state, masterCompressorParams: action.payload.params, toastMessage: `Loaded ${action.payload.name}` };
+            return { ...state, masterCompressorParams: action.payload.params, toastMessage: `Loaded ${action.payload.name}`, isDirty: true };
             
         case ActionType.CLEAR_COMPRESSOR_SNAPSHOT: {
             const newSnaps = [...state.compressorSnapshots];
             newSnaps[action.payload.index] = null;
-            return { ...state, compressorSnapshots: newSnaps };
+            return { ...state, compressorSnapshots: newSnaps, isDirty: true };
         }
         
-        // --- Template Actions ---
         case ActionType.APPLY_BANK_A_DRUM_TEMPLATE: {
              const { patternId, sequences, grooveId, grooveDepth } = action.payload;
              return { ...state, patterns: updatePatternImmutably(state.patterns, patternId, p => {
@@ -654,7 +684,7 @@ const reducer = (state: AppState, action: Action): AppState => {
                 newGrooveIds[0] = grooveId;
                 newGrooveDepths[0] = grooveDepth;
                 return { ...p, steps: newSteps, grooveIds: newGrooveIds, grooveDepths: newGrooveDepths };
-             })};
+             }), isDirty: true };
         }
         case ActionType.APPLY_SEQUENCE_TEMPLATE: {
             const { patternId, sampleId, steps, grooveId, grooveDepth } = action.payload;
@@ -664,41 +694,39 @@ const reducer = (state: AppState, action: Action): AppState => {
                 steps: p.steps.map((lane, i) => i === sampleId ? newStepsData : lane),
                 grooveIds: p.grooveIds.map((id, i) => i === state.activeSampleBank ? grooveId : id),
                 grooveDepths: p.grooveDepths.map((depth, i) => i === state.activeSampleBank ? grooveDepth : depth),
-             }))};
+             })), isDirty: true };
         }
              
-        // --- Utility Actions ---
         case ActionType.CLEAR_SEQUENCE: {
             const { patternId, sampleId } = action.payload;
-            return { ...state, patterns: updatePatternImmutably(state.patterns, patternId, p => ({ ...p, steps: p.steps.map((lane, i) => i === sampleId ? createEmptySteps() : lane) })) };
+            return { ...state, patterns: updatePatternImmutably(state.patterns, patternId, p => ({ ...p, steps: p.steps.map((lane, i) => i === sampleId ? createEmptySteps() : lane) })), isDirty: true };
         }
 
         case ActionType.FILL_SEQUENCE: {
             const { patternId, sampleId } = action.payload;
             const newSteps = createEmptySteps().map((s, i) => i % 4 === 0 ? { active: true, velocity: 1 } : s);
-            return { ...state, patterns: updatePatternImmutably(state.patterns, patternId, p => ({ ...p, steps: p.steps.map((lane, i) => i === sampleId ? newSteps : lane) })) };
+            return { ...state, patterns: updatePatternImmutably(state.patterns, patternId, p => ({ ...p, steps: p.steps.map((lane, i) => i === sampleId ? newSteps : lane) })), isDirty: true };
         }
 
         case ActionType.RANDOMIZE_SEQUENCE: {
             const { patternId, sampleId } = action.payload;
             const newSteps = createEmptySteps().map(() => ({ active: Math.random() > 0.5, velocity: 1 }));
-            return { ...state, patterns: updatePatternImmutably(state.patterns, patternId, p => ({ ...p, steps: p.steps.map((lane, i) => i === sampleId ? newSteps : lane) })) };
+            return { ...state, patterns: updatePatternImmutably(state.patterns, patternId, p => ({ ...p, steps: p.steps.map((lane, i) => i === sampleId ? newSteps : lane) })), isDirty: true };
         }
 
         case ActionType.RANDOMIZE_PITCH: {
             const { patternId, sampleId, key, scale: scaleName } = action.payload;
             const scale = SCALES.find(s => s.name === scaleName);
-            if (!scale || scale.intervals.length === 0) return state; // Can't randomize on chromatic/thru
+            if (!scale || scale.intervals.length === 0) return state;
             const scaleNotesInCents: number[] = [0];
             let currentCents = 0;
             for (const interval of scale.intervals) { currentCents += interval; scaleNotesInCents.push(currentCents); }
             scaleNotesInCents.pop();
             const octaveSpan = scale.intervals.reduce((a, b) => a + b, 0);
             const notesToChooseFrom = [ ...scaleNotesInCents.map(n => n - octaveSpan), ...scaleNotesInCents, ...scaleNotesInCents.map(n => n + octaveSpan) ];
-            return { ...state, patterns: updatePatternImmutably(state.patterns, patternId, p => ({ ...p, steps: p.steps.map((lane, i) => i === sampleId ? lane.map(step => step.active ? { ...step, detune: notesToChooseFrom[Math.floor(Math.random() * notesToChooseFrom.length)] } : step) : lane) })) };
+            return { ...state, patterns: updatePatternImmutably(state.patterns, patternId, p => ({ ...p, steps: p.steps.map((lane, i) => i === sampleId ? lane.map(step => step.active ? { ...step, detune: notesToChooseFrom[Math.floor(Math.random() * notesToChooseFrom.length)] } : step) : lane) })), isDirty: true };
         }
         
-        // --- Copy/Paste ---
         case ActionType.COPY_LANE: {
             const pattern = state.patterns[state.activePatternIds[state.activeSampleBank]];
             if (!pattern) return state;
@@ -707,7 +735,7 @@ const reducer = (state: AppState, action: Action): AppState => {
         case ActionType.PASTE_LANE: {
             if (!state.laneClipboard) return state;
             const { patternId, sampleId } = { patternId: state.activePatternIds[state.activeSampleBank], sampleId: state.activeSampleId };
-            return { ...state, patterns: updatePatternImmutably(state.patterns, patternId, p => ({ ...p, steps: p.steps.map((lane, i) => i === sampleId ? state.laneClipboard!.steps : lane), paramLocks: { ...p.paramLocks, [sampleId]: state.laneClipboard!.paramLocks } })), toastMessage: 'Lane pasted' };
+            return { ...state, patterns: updatePatternImmutably(state.patterns, patternId, p => ({ ...p, steps: p.steps.map((lane, i) => i === sampleId ? state.laneClipboard!.steps : lane), paramLocks: { ...p.paramLocks, [sampleId]: state.laneClipboard!.paramLocks } })), toastMessage: 'Lane pasted', isDirty: true };
         }
         case ActionType.COPY_BANK: {
             const pattern = state.patterns[state.activePatternIds[state.activeSampleBank]];
@@ -736,7 +764,7 @@ const reducer = (state: AppState, action: Action): AppState => {
                 const newGrooveDepths = [...p.grooveDepths];
                 newGrooveDepths[bankIndex] = state.bankClipboard!.grooveDepth;
                 return { ...p, steps: newSteps, paramLocks: newLocks, grooveIds: newGrooveIds, grooveDepths: newGrooveDepths };
-            }), toastMessage: 'Bank pasted' };
+            }), toastMessage: 'Bank pasted', isDirty: true };
         }
         case ActionType.COPY_PATTERN: {
             const { patternId } = action.payload;
@@ -747,7 +775,7 @@ const reducer = (state: AppState, action: Action): AppState => {
         case ActionType.PASTE_PATTERN: {
             const { patternId } = action.payload;
             if (!state.patternClipboard) return state;
-            return { ...state, patterns: state.patterns.map(p => p.id === patternId ? { ...state.patternClipboard!, id: patternId } : p), toastMessage: 'Pattern pasted' };
+            return { ...state, patterns: state.patterns.map(p => p.id === patternId ? { ...state.patternClipboard!, id: patternId } : p), toastMessage: 'Pattern pasted', isDirty: true };
         }
 
         default:

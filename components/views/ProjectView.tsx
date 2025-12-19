@@ -164,16 +164,20 @@ interface ProjectViewProps {
 
 const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
     const { state, dispatch } = useContext(AppContext);
-    const { audioContext, samples, activeSampleBank, activePatternIds, patterns, isPlaying } = state;
+    const { audioContext, samples, activeSampleBank, activePatternIds, patterns, isPlaying, currentProjectName } = state;
 
     const [projects, setProjects] = useState<Project[]>([]);
-    const [projectName, setProjectName] = useState('New Project');
+    const [projectName, setProjectName] = useState(currentProjectName);
     const [sampleKits, setSampleKits] = useState<SampleKit[]>([]);
     const [sampleKitName, setSampleKitName] = useState('New Sample Kit');
     const [bankPresets, setBankPresets] = useState<BankPreset[]>([]);
     const [bankPresetName, setBankPresetName] = useState('New Bank Preset');
     const [isManualOpen, setIsManualOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    useEffect(() => {
+        setProjectName(currentProjectName);
+    }, [currentProjectName]);
     
     // Startup Preference
     const [startWithDefault, setStartWithDefault] = useState(false);
@@ -215,7 +219,8 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
     }, [refreshProjects, refreshSampleKits, refreshBankPresets]);
 
     const handleSaveProject = async () => {
-        if (!projectName.trim()) {
+        const trimmedProjectName = projectName.trim();
+        if (!trimmedProjectName) {
             dispatch({ type: ActionType.SHOW_TOAST, payload: 'プロジェクト名を入力してください。' });
             return;
         }
@@ -229,12 +234,13 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
         propertiesToDelete.forEach(prop => delete (stateToSave as Partial<AppState>)[prop]);
         
         const project: Project = {
-            name: projectName.trim(),
+            name: trimmedProjectName,
             createdAt: new Date(),
             state: stateToSave,
             samples: samplesToStorableArray(state.samples),
         };
         await db.projects.add(project);
+        dispatch({ type: ActionType.PROJECT_SAVED, payload: { name: trimmedProjectName } });
         dispatch({ type: ActionType.SHOW_TOAST, payload: `プロジェクト「${project.name}」を保存しました。` });
         refreshProjects();
     };
@@ -247,7 +253,10 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
             }
             const loadedSamples = storableToSamplesArray(project.samples, audioContext);
             const loadedState = { ...project.state, samples: loadedSamples };
-            dispatch({ type: ActionType.LOAD_PROJECT_STATE, payload: loadedState });
+            dispatch({ 
+                type: ActionType.LOAD_PROJECT_STATE, 
+                payload: { state: loadedState, name: project.name } 
+            });
             dispatch({ type: ActionType.SHOW_TOAST, payload: `プロジェクト「${project.name}」を読み込みました。` });
         }
     }, [audioContext, dispatch, isPlaying, flushAllSources]);
@@ -473,7 +482,7 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
     
                 if (window.confirm(`Import and load project "${importedProject.name}"? This will overwrite your current session.`)) {
                     const newProjectId = await db.projects.add(importedProject);
-                    refreshProjects();
+                    await refreshProjects();
                     await handleLoadProject(newProjectId);
                 }
     
