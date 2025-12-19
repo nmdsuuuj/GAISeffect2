@@ -1,6 +1,6 @@
-import React, { useState, useContext, useEffect, useCallback } from 'react';
+import React, { useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { AppContext } from '../../context/AppContext';
-import { db, Project, StorableSample, SampleKit, BankPreset, audioBufferToStorable, storableToAudioBuffer, Session } from '../../db';
+import { db, Project, StorableSample, SampleKit, BankPreset, audioBufferToStorable, storableToAudioBuffer, Session, BankKit } from '../../db';
 import { ActionType, AppState, Sample, BankPresetData } from '../../types';
 import { PADS_PER_BANK } from '../../constants';
 
@@ -172,6 +172,7 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
     const [bankPresets, setBankPresets] = useState<BankPreset[]>([]);
     const [bankPresetName, setBankPresetName] = useState('New Bank Preset');
     const [isManualOpen, setIsManualOpen] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
     // Startup Preference
     const [startWithDefault, setStartWithDefault] = useState(false);
@@ -423,10 +424,72 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
         }
     };
 
+    // --- Project Import/Export ---
+    const handleExportProject = async (projectId: number) => {
+        try {
+            const project = await db.projects.get(projectId);
+            if (!project) {
+                dispatch({ type: ActionType.SHOW_TOAST, payload: 'Project not found.' });
+                return;
+            }
+    
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(project));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            const fileName = project.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            downloadAnchorNode.setAttribute("download", `gs_project_${fileName}.json`);
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+            dispatch({ type: ActionType.SHOW_TOAST, payload: `Project '${project.name}' exported.` });
+    
+        } catch (error) {
+            console.error("Failed to export project:", error);
+            dispatch({ type: ActionType.SHOW_TOAST, payload: 'Project export failed.' });
+        }
+    };
+
+    const handleImportProjectClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleImportProjectFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+    
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const json = e.target?.result as string;
+                const importedProject = JSON.parse(json) as Project;
+    
+                if (!importedProject.name || !importedProject.createdAt || !importedProject.state || !importedProject.samples) {
+                    throw new Error("Invalid project file format.");
+                }
+    
+                delete importedProject.id;
+                importedProject.createdAt = new Date(importedProject.createdAt);
+    
+                if (window.confirm(`Import project "${importedProject.name}"?`)) {
+                    await db.projects.add(importedProject);
+                    refreshProjects();
+                    dispatch({ type: ActionType.SHOW_TOAST, payload: `Project "${importedProject.name}" imported.` });
+                }
+    
+            } catch (err) {
+                console.error("Failed to import project:", err);
+                dispatch({ type: ActionType.SHOW_TOAST, payload: 'Project import failed. Invalid file.' });
+            }
+        };
+        reader.readAsText(file);
+        if (event.target) event.target.value = '';
+    };
+
     const renderListItem = (
         item: { id?: number; name: string; createdAt: Date }, 
         onLoad: (id: number) => void, 
-        onDelete: (id: number) => void
+        onDelete: (id: number) => void,
+        onExport?: (id: number) => void
     ) => (
         <li key={item.id} className="flex items-center justify-between bg-emerald-50 p-1.5 rounded text-sm">
             <div>
@@ -435,6 +498,7 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
             </div>
             <div className="space-x-1">
                 <button onClick={() => onLoad(item.id!)} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-2 py-1 rounded text-xs">読込</button>
+                {onExport && <button onClick={() => onExport(item.id!)} className="bg-sky-500 hover:bg-sky-600 text-white font-bold px-2 py-1 rounded text-xs">Export</button>}
                 <button onClick={() => onDelete(item.id!)} className="bg-rose-500 hover:bg-rose-600 text-white font-bold px-2 py-1 rounded text-xs">削除</button>
             </div>
         </li>
@@ -442,6 +506,7 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
 
     return (
         <div className="p-2 space-y-3 h-full overflow-y-auto">
+            <input type="file" accept=".json" ref={fileInputRef} onChange={handleImportProjectFile} className="hidden" />
             {isManualOpen && <ManualModal onClose={() => setIsManualOpen(false)} />}
 
             <div className="bg-white p-2 rounded-lg shadow-md space-y-2">
@@ -451,8 +516,11 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
                     <button onClick={handleSaveProject} className="bg-sky-500 hover:bg-sky-600 text-white font-bold px-4 py-2 rounded text-sm whitespace-nowrap">保存</button>
                 </div>
                 <ul className="space-y-1 max-h-24 overflow-y-auto pr-1">
-                    {projects.map(p => renderListItem(p, handleLoadProject, handleDeleteProject))}
+                    {projects.map(p => renderListItem(p, handleLoadProject, handleDeleteProject, handleExportProject))}
                 </ul>
+                 <div className="border-t border-emerald-100 pt-2">
+                    <button onClick={handleImportProjectClick} className="w-full bg-amber-200 hover:bg-amber-300 text-amber-800 font-bold py-2 rounded text-xs">プロジェクトをインポート (.json)</button>
+                </div>
             </div>
             
              <div className="bg-white p-2 rounded-lg shadow-md space-y-2">
