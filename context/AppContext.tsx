@@ -558,8 +558,50 @@ const reducer = (state: AppState, action: Action): AppState => {
         case ActionType.RESET_TO_USER_DEFAULT:
              return { ...INITIAL_STATE, audioContext: state.audioContext, isInitialized: true };
 
-        case ActionType.LOAD_PROJECT_STATE:
-             return { ...INITIAL_STATE, ...action.payload, isInitialized: true, audioContext: state.audioContext, isPlaying: state.isPlaying, projectLoadCount: state.projectLoadCount + 1 };
+        case ActionType.LOAD_PROJECT_STATE: {
+             const loadedState = action.payload;
+             
+             // --- MIGRATION & HYDRATION ---
+             // Defensively merge patterns to add new properties like totalSteps
+             if (loadedState.patterns) {
+                 loadedState.patterns = loadedState.patterns.map((p: Partial<Pattern>, i: number) => {
+                     const defaultPattern = createEmptyPattern(p.id ?? i);
+                     const migratedPattern = { ...defaultPattern, ...p };
+
+                     // If totalSteps is missing from an old project file, default it.
+                     if (!migratedPattern.totalSteps) {
+                         migratedPattern.totalSteps = 32;
+                     }
+
+                     return migratedPattern;
+                 });
+             }
+             
+             // Ensure synth object has all nested properties to prevent crashes
+             if (loadedState.synth) {
+                 const loadedSynth = loadedState.synth;
+                 loadedState.synth = {
+                     ...DEFAULT_SYNTH,
+                     ...loadedSynth,
+                     osc1: { ...DEFAULT_SYNTH.osc1, ...(loadedSynth.osc1 || {}) },
+                     osc2: { ...DEFAULT_SYNTH.osc2, ...(loadedSynth.osc2 || {}) },
+                     filter: { ...DEFAULT_SYNTH.filter, ...(loadedSynth.filter || {}) },
+                     filterEnv: { ...DEFAULT_SYNTH.filterEnv, ...(loadedSynth.filterEnv || {}) },
+                     ampEnv: { ...DEFAULT_SYNTH.ampEnv, ...(loadedSynth.ampEnv || {}) },
+                     lfo1: { ...DEFAULT_SYNTH.lfo1, ...(loadedSynth.lfo1 || {}) },
+                     lfo2: { ...DEFAULT_SYNTH.lfo2, ...(loadedSynth.lfo2 || {}) },
+                 };
+             }
+
+             return { 
+                 ...INITIAL_STATE, 
+                 ...loadedState, 
+                 isInitialized: true, 
+                 audioContext: state.audioContext, 
+                 isPlaying: state.isPlaying, 
+                 projectLoadCount: state.projectLoadCount + 1 
+            };
+        }
              
         case ActionType.SET_SAMPLES:
              return { ...state, samples: action.payload };

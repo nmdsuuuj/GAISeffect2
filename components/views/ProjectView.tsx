@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { AppContext } from '../../context/AppContext';
 import { db, Project, StorableSample, SampleKit, BankPreset, audioBufferToStorable, storableToAudioBuffer, Session, BankKit } from '../../db';
@@ -470,10 +471,10 @@ const ProjectView: React.FC<ProjectViewProps> = ({ flushAllSources }) => {
                 delete importedProject.id;
                 importedProject.createdAt = new Date(importedProject.createdAt);
     
-                if (window.confirm(`Import project "${importedProject.name}"?`)) {
-                    await db.projects.add(importedProject);
+                if (window.confirm(`Import and load project "${importedProject.name}"? This will overwrite your current session.`)) {
+                    const newProjectId = await db.projects.add(importedProject);
                     refreshProjects();
-                    dispatch({ type: ActionType.SHOW_TOAST, payload: `Project "${importedProject.name}" imported.` });
+                    await handleLoadProject(newProjectId);
                 }
     
             } catch (err) {
