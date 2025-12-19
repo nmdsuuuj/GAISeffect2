@@ -601,13 +601,33 @@ export const useAudioEngine = () => {
         src.detune.value = (safe(pitch)*100)+safe(detune); src.loop = !!loop;
         let sO = safe(start)*b.duration, eO = safe(end)*b.duration; if (sO>=eO) eO=b.duration;
         if (loop) { src.loopStart=sO; src.loopEnd=eO; }
-        const vg = audioContext.createGain(); vg.gain.value = 0;
+        const vg = audioContext.createGain(); 
         const l = lpFilterNodesRef.current[id], h = hpFilterNodesRef.current[id], g = sampleGainsRef.current[id];
         if (l) { src.connect(vg); vg.connect(l); } else return;
         const now = safe(time, audioContext.currentTime);
         setTarget(l.frequency, lpFreq!, now, 0.01); setTarget(h.frequency, hpFreq!, now, 0.01); setTarget(g.gain, volume, now, 0.01);
-        setValue(vg.gain, velocity, now);
-        if (decay!<1) vg.gain.exponentialRampToValueAtTime(0.001, now + safe(decay)*5);
+        
+        // --- FINALIZED ROBUST ENVELOPE LOGIC ---
+        const gainParam = vg.gain;
+        gainParam.cancelScheduledValues(now);
+    
+        // 1. Use a very short linear ramp for the attack. This prevents clicks and is more reliable than setValueAtTime(0).
+        const attackTime = 0.002;
+        gainParam.setValueAtTime(0, now); // Ensure we start from 0
+        gainParam.linearRampToValueAtTime(velocity, now + attackTime);
+    
+        // 2. Restore the original "special spec" for decay.
+        const decayValue = safe(decay, 1);
+        if (decayValue < 1) {
+            // Restore the original linear time mapping.
+            const decayDurationSeconds = decayValue * 5;
+            // Use setTargetAtTime for a robust exponential decay.
+            // A time constant of duration/5 gives a good perceptual decay time.
+            const timeConstant = Math.max(0.001, decayDurationSeconds / 5);
+            gainParam.setTargetAtTime(0.0, now + attackTime, timeConstant);
+        }
+        // If decay is 1, no further ramp is scheduled, creating the "gate" effect.
+
         src.start(now, sO, !loop ? (eO-sO) : undefined);
         src.onended = () => { try { vg.disconnect(); } catch(e){} };
     }, [audioContext, samples]);

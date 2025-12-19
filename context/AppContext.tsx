@@ -197,6 +197,18 @@ const reducer = (state: AppState, action: Action): AppState => {
             return { ...state, activePatternIds: newIds };
         }
 
+        case ActionType.UPDATE_PATTERN_PLAYBACK_SCALE: {
+            const { patternId, key, scale } = action.payload;
+            return {
+                ...state,
+                patterns: updatePatternImmutably(state.patterns, patternId, p => ({
+                    ...p,
+                    ...(key !== undefined && { playbackKey: key }),
+                    ...(scale !== undefined && { playbackScale: scale }),
+                }))
+            };
+        }
+
         case ActionType.UPDATE_PATTERN_PARAMS: {
             const { patternId, params } = action.payload;
             return {

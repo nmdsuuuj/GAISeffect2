@@ -1,4 +1,3 @@
-
 import { Groove, BiquadFilterType, PerformanceChain, FXAutomation, PerformanceEffect, FXType } from "./types";
 
 export const PAD_SIZE = 'w-8 h-8';
@@ -43,7 +42,7 @@ export const GROOVE_PATTERNS: Groove[] = Array.from({ length: TOTAL_GROOVES}, (_
     let pattern: Groove = { id: i, name: `Groove ${i + 1}`, offsets: Array(16).fill(0) };
 
     // Fill in specific patterns
-    if (i === 0) pattern = { id: 0, name: 'Straight', offsets: [Z,Z,Z,Z, Z,Z,Z,Z, Z,Z,Z,Z, Z,Z,Z,Z] };
+    if (i === 0) pattern = { id: 0, name: 'Adrenaline', offsets: [Z,-H,Z,-H, Z,-H,Z,-H, Z,-H,Z,-H, Z,-H,Z,-H] };
     if (i === 1) pattern = { id: 1, name: 'Swing 16S', offsets: [Z,S,Z,S, Z,S,Z,S, Z,S,Z,S, Z,S,Z,S] };
     if (i === 2) pattern = { id: 2, name: 'Swing 16H', offsets: [Z,H,Z,H, Z,H,Z,H, Z,H,Z,H, Z,H,Z,H] };
     if (i === 3) pattern = { id: 3, name: 'Swing 16L', offsets: [Z,L,Z,L, Z,L,Z,L, Z,L,Z,L, Z,L,Z,L] };
